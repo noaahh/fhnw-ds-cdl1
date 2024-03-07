@@ -2,3 +2,4 @@
 .env
 data/*.zip
 data/*.csv
+.DS_Store
