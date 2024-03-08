@@ -1,48 +1,57 @@
 import glob
 import hashlib
+import logging
 import os
 import zipfile
 
 import pandas as pd
-from tqdm import tqdm
 from dotenv import load_dotenv
 from influxdb_client import InfluxDBClient, Point, WritePrecision
 from influxdb_client.client.write_api import SYNCHRONOUS
+from tqdm import tqdm
+
+logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(message)s')
+logger = logging.getLogger(__name__)
 
 load_dotenv()
 
-data_folder = "./data"
-
-MEASUREMENT_CSV_FILE_NAMES = ["Accelerometer",
-                              "AccelerometerUncalibrated",
-                              "Gravity",
-                              "Gyroscope",
-                              "GyroscopeUncalibrated",
-                              "Metadata"]
-
-COLUMN_MAPPINGS = {
-    'accelerometer': ['time', 'z', 'y', 'x'],
-    'gyroscope': ['time', 'z', 'y', 'x'],
-    'gravity': ['time', 'z', 'y', 'x'],
-    'accelerometeruncalibrated': ['time', 'z', 'y', 'x'],
-    'gyroscopeuncalibrated': ['time', 'z', 'y', 'x'],
-    'orientation': ['time', 'yaw', 'qx', 'qz', 'roll', 'qw', 'qy', 'pitch']
-}
+CONFIG = {"data_folder": "./data",
+          "resample_rate_hz": 50,
+          "start_crop_seconds": 5,
+          "end_crop_seconds": 5,
+          "segment_size_seconds": 5,
+          "overlap_seconds": 2,
+          "csv_file_names": ["Accelerometer",
+                             "AccelerometerUncalibrated",
+                             "Gravity",
+                             "Gyroscope",
+                             "GyroscopeUncalibrated",
+                             "Metadata"],
+          "column_mappings": {'accelerometer': ['time', 'z', 'y', 'x'],
+                              'gyroscope': ['time', 'z', 'y', 'x'],
+                              'gravity': ['time', 'z', 'y', 'x'],
+                              'accelerometeruncalibrated': ['time', 'z', 'y', 'x'],
+                              'gyroscopeuncalibrated': ['time', 'z', 'y', 'x'],
+                              'orientation': ['time', 'yaw', 'qx', 'qz', 'roll', 'qw', 'qy', 'pitch']}}
 
 
 class MeasurementFile:
     def __init__(self, zip_file_path):
-        self.file_hash = None
-        self.data = None
+        self.validate_file(zip_file_path)
+        self.zip_file_path = zip_file_path
 
+        self.data = self.init_data()
+        self.file_hash = self.generate_file_hash()
+
+    def __repr__(self):
+        return f"MeasurementFile(label={self.get_label()}, path={self.zip_file_path}, hash={self.file_hash})"
+
+    @staticmethod
+    def validate_file(zip_file_path):
         if not os.path.exists(zip_file_path):
             raise ValueError(f"File {zip_file_path} does not exist")
-
         if not zipfile.is_zipfile(zip_file_path):
             raise ValueError(f"File {zip_file_path} is not a zip file")
-
-        self.zip_file_path = zip_file_path
-        self.init_data()
 
     def get_label(self):
         return os.path.basename(self.zip_file_path).rsplit('.', 1)[0].split('-', 1)[0]
@@ -52,13 +61,11 @@ class MeasurementFile:
             raise ValueError("No data to get metadata from")
 
         metadata_df = self.data['metadata']
-        return {
-            'device_name': metadata_df['device name'].iloc[0],
-            'platform': metadata_df['platform'].iloc[0],
-            'app_version': str(metadata_df['appVersion'].iloc[0]),
-            'recording_time': metadata_df['recording time'].iloc[0],
-            'device_id': metadata_df['device id'].iloc[0]
-        }
+        return {'device_name': metadata_df['device name'].iloc[0],
+                'platform': metadata_df['platform'].iloc[0],
+                'app_version': str(metadata_df['appVersion'].iloc[0]),
+                'recording_time': metadata_df['recording time'].iloc[0],
+                'device_id': metadata_df['device id'].iloc[0]}
 
     def get_sensor_data(self):
         if not self.data:
@@ -67,13 +74,16 @@ class MeasurementFile:
         return {k: v for k, v in self.data.items() if k != 'metadata'}
 
     def init_data(self):
-        self.data = {}
+        data = {}
         with zipfile.ZipFile(self.zip_file_path, 'r') as z:
-            for csv_filename in MEASUREMENT_CSV_FILE_NAMES:
-                with z.open(f"{csv_filename}.csv") as f:
-                    self.data[csv_filename.lower()] = pd.read_csv(f)
+            for csv_filename in CONFIG['csv_file_names']:
+                try:
+                    with z.open(f"{csv_filename}.csv") as f:
+                        data[csv_filename.lower()] = pd.read_csv(f)
+                except KeyError:
+                    logger.warning(f"Warning: {csv_filename}.csv not found in {self.zip_file_path}")
 
-        self.file_hash = self.generate_file_hash()
+        return data
 
     def generate_file_hash(self):
         if not self.data:
@@ -86,20 +96,21 @@ class MeasurementFile:
 
 
 class BaseProcessor:
-    def __init__(self, measurement_file, sensor_name):
+    def __init__(self, measurement_file):
         self.measurement_file = measurement_file
 
-    def preprocess(self, data):
-        if 'seconds_elapsed' in data.columns:
-            data = data.drop(columns=['seconds_elapsed'])
-
+    @staticmethod
+    def preprocess(data):
+        data = data.drop(columns=['seconds_elapsed'])
         data['time'] = pd.to_datetime(data['time'], unit='ns')
         data = data.set_index('time', drop=True)
 
         return data
 
-    def crop(self, data, start_seconds=5, end_seconds=5):
+    @staticmethod
+    def crop(data):
         total_duration = (data.index.max() - data.index.min()).total_seconds()
+        start_seconds, end_seconds = CONFIG['start_crop_seconds'], CONFIG['end_crop_seconds']
         if total_duration < start_seconds + end_seconds:
             raise ValueError("Signal is too short to crop")
 
@@ -108,21 +119,22 @@ class BaseProcessor:
 
         return data.loc[start_time:end_time]
 
-    def resample(self, data, rate_hz=50, interpolation_method='linear'):
+    @staticmethod
+    def resample(data):
+        rate_hz = CONFIG['resample_rate_hz']
         rate = f"{int(1E6 / rate_hz)}us"
-        data = (data
-                .resample(rate, origin="start")
-                .mean()) # TODO: check if mean is the best way to interpolate the data
+        data = data.resample(rate, origin="start").mean()  # TODO: check if mean is the best way to interpolate the data
 
         if data.isnull().values.any() or data.isna().values.any():
-            print(f"NaNs present in resampled data for {self.measurement_file.get_label()}")
+            logger.warning(f"Warning: NaNs found in resampled data for {self.measurement_file}")
             data = data.fillna(method='bfill')  # Backfill NaNs
 
         return data
 
-    def segment(self, data, segment_size_seconds, overlap_size_seconds):
-        segment_length = pd.Timedelta(seconds=segment_size_seconds)
-        overlap_length = pd.Timedelta(seconds=overlap_size_seconds)
+    @staticmethod
+    def segment(data):
+        segment_length = pd.Timedelta(seconds=CONFIG['segment_size_seconds'])
+        overlap_length = pd.Timedelta(seconds=CONFIG['overlap_seconds'])
         segments = []
 
         start_time = data.index.min()
@@ -137,28 +149,20 @@ class BaseProcessor:
 
         segment_lengths = set([len(segment) for segment in segments])
         if len(segment_lengths) != 1:
-            print(segment_lengths)
             raise ValueError("Segments are not of equal length")
 
         return segments
 
-    def process(self, data, rate_hz=50, segment_size_seconds=5, overlap_seconds=1):
+    def process(self, data):
         preprocessed_data = self.preprocess(data)
         cropped_data = self.crop(preprocessed_data)
-        resampled_data = self.resample(cropped_data, rate_hz)
-        segments = self.segment(resampled_data, segment_size_seconds, overlap_seconds)
+        resampled_data = self.resample(cropped_data)
+        segments = self.segment(resampled_data)
+
+        if len(segments) == 0:
+            raise ValueError("No segments found")
 
         return segments
-
-
-def create_measurement_files(data_folder):
-    zip_files = glob.glob(os.path.join(data_folder, "*.zip"))
-
-    measurement_files = []
-    for zip_path in zip_files:
-        measurement_files.append(MeasurementFile(zip_path))
-
-    return measurement_files
 
 
 def resample_sensor_data(sensor_data, resample_rate):
@@ -181,76 +185,113 @@ def segment_sensor_data(sensor_data, segment_size, overlap):
 
 
 def get_processor(sensor_name, measurement_file):
-    return BaseProcessor(measurement_file, sensor_name)
+    return BaseProcessor(measurement_file)
 
 
-def process_zip_files(data_folder):
-    measurement_files = create_measurement_files(data_folder)
+def filter_measurement_files(measurement_files):
+    return [mf for mf in measurement_files if
+            mf.get_metadata()['device_name'] != 'iPhone X']  # TODO: find a better way to filter the broken phone
 
-    for measurement_file in tqdm(measurement_files):
 
-        if is_file_processed(measurement_file.generate_file_hash()):
-            print(f"Skipping {measurement_file.get_label()} as it has already been processed")
-            continue
+def create_measurement_files(data_folder):
+    zip_files = glob.glob(os.path.join(data_folder, "*.zip"))
+    return [MeasurementFile(zip_path) for zip_path in zip_files]
 
-        print("\n\n---")
-        print(measurement_file.get_metadata())
-        print("---")
 
-        for sensor_name, sensor_data in measurement_file.get_sensor_data().items():
-            processor = get_processor(sensor_name, measurement_file)
+def process_sensor_data(sensor_name, sensor_data, measurement_file):
+    processor = get_processor(sensor_name, measurement_file)
+    segments = processor.process(sensor_data)
 
-            segments = processor.process(sensor_data)
-            for i, segment in tqdm(enumerate(segments), desc=f"Processing {sensor_name} segments", total=len(segments)):
-                segment_id = f"{sensor_name}_{i}"
-                write_segment(measurement_file, segment, sensor_name, segment_id)
+    for i, segment in enumerate(segments):
+        segment_id = f"{sensor_name}_{i}"
+        write_segment(measurement_file, segment, sensor_name, segment_id)
 
-    print("All files processed.")
+
+def process_measurement_file(measurement_file):
+    if is_file_processed(measurement_file.generate_file_hash()):
+        logger.info(f"File {measurement_file} already processed. Skipping...")
+        return
+
+    for csv_file_name in CONFIG["csv_file_names"]:
+        sensor_name = csv_file_name.lower()
+        sensor_data = measurement_file.get_sensor_data().get(sensor_name)
+        if sensor_data is not None:
+            process_sensor_data(sensor_name, sensor_data, measurement_file)
+
+
+def process_zip_files():
+    measurement_files = create_measurement_files(CONFIG['data_folder'])
+    filtered_files = filter_measurement_files(measurement_files)
+
+    for measurement_file in tqdm(filtered_files, desc="Processing measurement files"):
+        process_measurement_file(measurement_file)
+
+    logger.info("All files processed")
 
 
 def write_segment(measurement_file, segment_df, sensor_name, segment_id):
     points = []
-    write_api = client.write_api(write_options=SYNCHRONOUS)
+    with InfluxDBWrapper() as client:
+        write_api = client.write_api
 
-    for index, row in segment_df.iterrows():
-        date_time = index.to_pydatetime()
-        point = Point(sensor_name).time(date_time)
+        for index, row in segment_df.iterrows():
+            point = Point(sensor_name).time(index, WritePrecision.NS)
 
-        for field in COLUMN_MAPPINGS.get(sensor_name, []):
-            if field in segment_df.columns and field != 'time':
-                point = point.field(field, row.get(field, 0))
+            for field in CONFIG['column_mappings'].get(sensor_name, []):
+                if field in segment_df.columns and field != 'time':
+                    point = point.field(field, row.get(field, 0))
 
-        point = point.tag("segment_id", segment_id)
-        point = point.tag("file_hash", measurement_file.generate_file_hash())
-        points.append(point)
+            point = point.tag("label", measurement_file.get_label())
+            point = point.tag("segment_id", segment_id)
+            point = point.tag("file_hash", measurement_file.generate_file_hash())
 
-    write_api.write(os.getenv("INFLUXDB_INIT_BUCKET"), os.getenv("INFLUXDB_INIT_ORG"), points, write_precision=WritePrecision.NS)
+            for k, v in measurement_file.get_metadata().items():
+                point = point.tag(k, v)
+
+            points.append(point)
+
+        write_api.write(os.getenv("INFLUXDB_INIT_BUCKET"), os.getenv("INFLUXDB_INIT_ORG"), points,
+                        write_precision=WritePrecision.NS)
 
 
 def is_file_processed(file_hash):
-    query = f'from(bucket: "{os.getenv("INFLUXDB_INIT_BUCKET")}") |> range(start: -30d) |> filter(fn: (r) => r.file_hash == "{file_hash}") |> limit(n: 1)'
-    result = query_api.query(query=query, org=os.getenv("INFLUXDB_INIT_ORG"))
-    for table in result:
-        for _ in table.records:
-            return True
-    return False
+    query = (f'from(bucket: "{os.getenv("INFLUXDB_INIT_BUCKET")}") |> range(start: -900d) |> filter(fn: (r) => '
+             f'r.file_hash == "{file_hash}") |> limit(n: 1)')
+
+    with InfluxDBWrapper() as influx:
+        query_api = influx.query_api
+        result = query_api.query(query=query, org=os.getenv("INFLUXDB_INIT_ORG"))
+
+        for table in result:
+            for _ in table.records:
+                return True
+        return False
+
+
+class InfluxDBWrapper:
+    def __init__(self):
+        load_dotenv()
+        self.url = os.getenv("INFLUXDB_URL", "http://localhost:8086")
+        self.token = os.getenv("INFLUXDB_TOKEN")
+        self.org = os.getenv("INFLUXDB_ORG")
+        self.bucket = os.getenv("INFLUXDB_BUCKET")
+        self.username = os.getenv("INFLUXDB_ADMIN_USERNAME")
+        self.password = os.getenv("INFLUXDB_ADMIN_PASSWORD")
+        self.client = None
+        self.write_api = None
+        self.query_api = None
+
+    def __enter__(self):
+        self.client = InfluxDBClient(url=self.url, token=self.token, org=self.org, username=self.username,
+                                     password=self.password)
+
+        self.write_api = self.client.write_api(write_options=SYNCHRONOUS)
+        self.query_api = self.client.query_api()
+        return self
+
+    def __exit__(self, exc_type, exc_val, exc_tb):
+        self.client.close()
 
 
 if __name__ == "__main__":
-    print(f"--- InfluxDB Connection Params ---")
-    print(f"USERNAME: {os.getenv('INFLUXDB_ADMIN_USERNAME')}")
-    print(f"Org: {os.getenv('INFLUXDB_INIT_ORG')}")
-    print(f"Bucket: {os.getenv('INFLUXDB_INIT_BUCKET')}")
-    print("---")
-
-    client = InfluxDBClient(url="http://localhost:8086",
-                            org=os.getenv("INFLUXDB_INIT_ORG"),
-                            username=os.getenv("INFLUXDB_ADMIN_USERNAME"),
-                            password=os.getenv("INFLUXDB_ADMIN_PASSWORD"),
-                            token=os.getenv("INFLUXDB_TOKEN"))
-
-    query_api = client.query_api()
-    write_api = client.write_api(write_options=SYNCHRONOUS)
-
-    print("Connected to InfluxDB")
-    process_zip_files(data_folder)
+    process_zip_files()
