@@ -99,16 +99,14 @@ class BaseProcessor:
     def __init__(self, measurement_file):
         self.measurement_file = measurement_file
 
-    @staticmethod
-    def preprocess(data):
+    def preprocess(self, data):
         data = data.drop(columns=['seconds_elapsed'])
         data['time'] = pd.to_datetime(data['time'], unit='ns')
         data = data.set_index('time', drop=True)
 
         return data
 
-    @staticmethod
-    def crop(data):
+    def crop(self, data):
         total_duration = (data.index.max() - data.index.min()).total_seconds()
         start_seconds, end_seconds = CONFIG['start_crop_seconds'], CONFIG['end_crop_seconds']
         if total_duration < start_seconds + end_seconds:
@@ -119,8 +117,7 @@ class BaseProcessor:
 
         return data.loc[start_time:end_time]
 
-    @staticmethod
-    def resample(data):
+    def resample(self, data):
         rate_hz = CONFIG['resample_rate_hz']
         rate = f"{int(1E6 / rate_hz)}us"
         data = data.resample(rate, origin="start").mean()  # TODO: check if mean is the best way to interpolate the data
@@ -131,8 +128,7 @@ class BaseProcessor:
 
         return data
 
-    @staticmethod
-    def segment(data):
+    def segment(self, data):
         segment_length = pd.Timedelta(seconds=CONFIG['segment_size_seconds'])
         overlap_length = pd.Timedelta(seconds=CONFIG['overlap_seconds'])
         segments = []
