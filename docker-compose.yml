@@ -1,17 +1,36 @@
-version: '3.7'
+version: '3.8'
 
 services:
   influxdb:
     image: influxdb:2.6-alpine
-    environment:
-      - DOCKER_INFLUXDB_INIT_USERNAME=admin
-      - DOCKER_INFLUXDB_INIT_PASSWORD=passwordpassword
-      - DOCKER_INFLUXDB_INIT_ORG=cdl1
-      - DOCKER_INFLUXDB_INIT_BUCKET=sensordata
+    hostname: influxdb
+    restart: unless-stopped
+    env_file:
+      - .env
     volumes:
       - influxdbv2:/var/lib/influxdb2:rw
     ports:
       - "8086:8086"
 
+  preprocessing:
+    build: .
+    restart: unless-stopped
+    env_file:
+      - .env
+    volumes:
+      - ./data:/app/data:rw
+    depends_on:
+      - influxdb
+
+  filebrowser:
+    image: filebrowser/filebrowser
+    restart: unless-stopped
+    volumes:
+      - ./data:/srv
+    ports:
+      - "8080:80"
+
 volumes:
   influxdbv2:
+  filebrowserdb:
+  filebrowserconfig:
