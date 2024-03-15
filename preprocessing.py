@@ -2,37 +2,39 @@ import glob
 import hashlib
 import logging
 import os
+import time
 import zipfile
 
 import pandas as pd
 from dotenv import load_dotenv
-from influxdb_client import InfluxDBClient, Point, WritePrecision
-from influxdb_client.client.write_api import SYNCHRONOUS
+from influxdb_client import Point, WritePrecision
 from tqdm import tqdm
+
+from src.db import InfluxDBWrapper, is_file_processed
+from src.label_mapping import extract_label_from_file_name, MeasurementGroup
 
 logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(message)s')
 logger = logging.getLogger(__name__)
 
 load_dotenv()
 
-CONFIG = {"data_folder": "./data",
-          "resample_rate_hz": 50,
-          "start_crop_seconds": 5,
-          "end_crop_seconds": 5,
-          "segment_size_seconds": 5,
-          "overlap_seconds": 2,
-          "csv_file_names": ["Accelerometer",
-                             "AccelerometerUncalibrated",
-                             "Gravity",
-                             "Gyroscope",
-                             "GyroscopeUncalibrated",
-                             "Metadata"],
-          "column_mappings": {'accelerometer': ['time', 'z', 'y', 'x'],
-                              'gyroscope': ['time', 'z', 'y', 'x'],
-                              'gravity': ['time', 'z', 'y', 'x'],
-                              'accelerometeruncalibrated': ['time', 'z', 'y', 'x'],
-                              'gyroscopeuncalibrated': ['time', 'z', 'y', 'x'],
-                              'orientation': ['time', 'yaw', 'qx', 'qz', 'roll', 'qw', 'qy', 'pitch']}}
+COLUMN_MAPPINGS = {'accelerometer': ['time', 'z', 'y', 'x'],
+                   'gyroscope': ['time', 'z', 'y', 'x'],
+                   'gravity': ['time', 'z', 'y', 'x'],
+                   'accelerometeruncalibrated': ['time', 'z', 'y', 'x'],
+                   'gyroscopeuncalibrated': ['time', 'z', 'y', 'x'],
+                   'orientation': ['time', 'yaw', 'qx', 'qz', 'roll', 'qw', 'qy', 'pitch']}
+
+
+def get_env_variable(variable_name):
+    value = os.getenv(variable_name)
+    if value is None:
+        raise ValueError(f"Environment variable {variable_name} must be set")
+
+    if value.isdigit():
+        return int(value)
+
+    return value
 
 
 class MeasurementFile:
@@ -44,7 +46,8 @@ class MeasurementFile:
         self.file_hash = self.generate_file_hash()
 
     def __repr__(self):
-        return f"MeasurementFile(label={self.get_label()}, path={self.zip_file_path}, hash={self.file_hash})"
+        return (f"MeasurementFile(label={self.get_label()}, path={self.zip_file_path}, hash={self.file_hash}, "
+                f"measurement_group={self.get_measurement_group()}")
 
     @staticmethod
     def validate_file(zip_file_path):
@@ -54,7 +57,13 @@ class MeasurementFile:
             raise ValueError(f"File {zip_file_path} is not a zip file")
 
     def get_label(self):
-        return os.path.basename(self.zip_file_path).rsplit('.', 1)[0].split('-', 1)[0]
+        return extract_label_from_file_name(self.zip_file_path)
+
+    def get_measurement_group(self):
+        if not self.zip_file_path.split("/")[-2].isdigit():
+            return None
+
+        return MeasurementGroup(int(self.zip_file_path.split("/")[-2]))
 
     def get_metadata(self):
         if not self.data:
@@ -76,7 +85,8 @@ class MeasurementFile:
     def init_data(self):
         data = {}
         with zipfile.ZipFile(self.zip_file_path, 'r') as z:
-            for csv_filename in CONFIG['csv_file_names']:
+            csv_file_names = get_env_variable("CSV_FILE_NAMES").split(",")
+            for csv_filename in csv_file_names:
                 try:
                     with z.open(f"{csv_filename}.csv") as f:
                         data[csv_filename.lower()] = pd.read_csv(f)
@@ -91,7 +101,14 @@ class MeasurementFile:
 
         metadata = self.get_metadata()
 
-        unique_str = f"{self.zip_file_path}{metadata['device_name']}{metadata['platform']}{metadata['app_version']}{metadata['recording_time']}{metadata['device_id']}"
+        unique_str = (f"{self.get_label()}"
+                      f"{metadata['device_name']}"
+                      f"{metadata['platform']}"
+                      f"{metadata['app_version']}"
+                      f"{metadata['recording_time']}"
+                      f"{metadata['device_id']}"
+                      f"{self.get_measurement_group()}")
+
         return hashlib.sha256(unique_str.encode()).hexdigest()
 
 
@@ -108,7 +125,9 @@ class BaseProcessor:
 
     def crop(self, data):
         total_duration = (data.index.max() - data.index.min()).total_seconds()
-        start_seconds, end_seconds = CONFIG['start_crop_seconds'], CONFIG['end_crop_seconds']
+
+        start_seconds, end_seconds = get_env_variable("START_CROP_SECONDS"), get_env_variable("END_CROP_SECONDS")
+
         if total_duration < start_seconds + end_seconds:
             raise ValueError("Signal is too short to crop")
 
@@ -118,19 +137,23 @@ class BaseProcessor:
         return data.loc[start_time:end_time]
 
     def resample(self, data):
-        rate_hz = CONFIG['resample_rate_hz']
+        rate_hz = get_env_variable("RESAMPLE_RATE_HZ")
+
         rate = f"{int(1E6 / rate_hz)}us"
         data = data.resample(rate, origin="start").mean()  # TODO: check if mean is the best way to interpolate the data
 
         if data.isnull().values.any() or data.isna().values.any():
             logger.warning(f"Warning: NaNs found in resampled data for {self.measurement_file}")
-            data = data.fillna(method='bfill')  # Backfill NaNs
+            data = data.bfill()  # Backfill NaNs
 
         return data
 
     def segment(self, data):
-        segment_length = pd.Timedelta(seconds=CONFIG['segment_size_seconds'])
-        overlap_length = pd.Timedelta(seconds=CONFIG['overlap_seconds'])
+        segment_size_seconds = get_env_variable("SEGMENT_SIZE_SECONDS")
+        overlap_seconds = get_env_variable("OVERLAP_SECONDS")
+
+        segment_length = pd.Timedelta(seconds=segment_size_seconds)
+        overlap_length = pd.Timedelta(seconds=overlap_seconds)
         segments = []
 
         start_time = data.index.min()
@@ -161,36 +184,20 @@ class BaseProcessor:
         return segments
 
 
-def resample_sensor_data(sensor_data, resample_rate):
-    sensor_data['time'] = pd.to_datetime(sensor_data['time'])
-    sensor_data = sensor_data.set_index('time')
-    sensor_data = sensor_data.resample(resample_rate).mean()
-    sensor_data = sensor_data.reset_index()
-    return sensor_data
-
-
-def segment_sensor_data(sensor_data, segment_size, overlap):
-    segments = []
-
-    for i in range(0, len(sensor_data), segment_size - overlap):
-        segment = sensor_data[i:i + segment_size]
-        if len(segment) == segment_size:
-            segments.append(segment)
-
-    return segments
-
-
 def get_processor(sensor_name, measurement_file):
     return BaseProcessor(measurement_file)
 
 
 def filter_measurement_files(measurement_files):
     return [mf for mf in measurement_files if
-            mf.get_metadata()['device_name'] != 'iPhone X']  # TODO: find a better way to filter the broken phone
+            mf.get_metadata()['device_name'] != 'iPhone X'
+            and mf.get_label() is not None
+            and mf.get_measurement_group() is not None
+            and not is_file_processed(mf.generate_file_hash())]
 
 
 def create_measurement_files(data_folder):
-    zip_files = glob.glob(os.path.join(data_folder, "*.zip"))
+    zip_files = glob.glob(os.path.join(data_folder, "**", "*.zip"), recursive=True)
     return [MeasurementFile(zip_path) for zip_path in zip_files]
 
 
@@ -204,11 +211,8 @@ def process_sensor_data(sensor_name, sensor_data, measurement_file):
 
 
 def process_measurement_file(measurement_file):
-    if is_file_processed(measurement_file.generate_file_hash()):
-        logger.info(f"File {measurement_file} already processed. Skipping...")
-        return
-
-    for csv_file_name in CONFIG["csv_file_names"]:
+    csv_file_names = get_env_variable("CSV_FILE_NAMES").split(",")
+    for csv_file_name in csv_file_names:
         sensor_name = csv_file_name.lower()
         sensor_data = measurement_file.get_sensor_data().get(sensor_name)
         if sensor_data is not None:
@@ -216,11 +220,13 @@ def process_measurement_file(measurement_file):
 
 
 def process_zip_files():
-    measurement_files = create_measurement_files(CONFIG['data_folder'])
+    data_folder = get_env_variable("DATA_FOLDER")
+    measurement_files = create_measurement_files(data_folder)
     filtered_files = filter_measurement_files(measurement_files)
 
-    for measurement_file in tqdm(filtered_files, desc="Processing measurement files"):
+    for measurement_file in tqdm(filtered_files):
         process_measurement_file(measurement_file)
+        logger.info(f"File {measurement_file} processed")
 
     logger.info("All files processed")
 
@@ -231,12 +237,13 @@ def write_segment(measurement_file, segment_df, sensor_name, segment_id):
         write_api = client.write_api
 
         for index, row in segment_df.iterrows():
-            point = Point(sensor_name).time(index, WritePrecision.NS)
+            point = Point(sensor_name).time(index, WritePrecision.MS)
 
-            for field in CONFIG['column_mappings'].get(sensor_name, []):
+            for field in COLUMN_MAPPINGS.get(sensor_name, []):
                 if field in segment_df.columns and field != 'time':
                     point = point.field(field, row.get(field, 0))
 
+            point = point.tag("measurement_group", measurement_file.get_measurement_group().name)
             point = point.tag("label", measurement_file.get_label())
             point = point.tag("segment_id", segment_id)
             point = point.tag("file_hash", measurement_file.generate_file_hash())
@@ -246,48 +253,33 @@ def write_segment(measurement_file, segment_df, sensor_name, segment_id):
 
             points.append(point)
 
-        write_api.write(os.getenv("INFLUXDB_INIT_BUCKET"), os.getenv("INFLUXDB_INIT_ORG"), points,
-                        write_precision=WritePrecision.NS)
-
-
-def is_file_processed(file_hash):
-    query = (f'from(bucket: "{os.getenv("INFLUXDB_INIT_BUCKET")}") |> range(start: -900d) |> filter(fn: (r) => '
-             f'r.file_hash == "{file_hash}") |> limit(n: 1)')
-
-    with InfluxDBWrapper() as influx:
-        query_api = influx.query_api
-        result = query_api.query(query=query, org=os.getenv("INFLUXDB_INIT_ORG"))
-
-        for table in result:
-            for _ in table.records:
-                return True
-        return False
-
-
-class InfluxDBWrapper:
-    def __init__(self):
-        load_dotenv()
-        self.url = os.getenv("INFLUXDB_URL", "http://localhost:8086")
-        self.token = os.getenv("INFLUXDB_TOKEN")
-        self.org = os.getenv("INFLUXDB_ORG")
-        self.bucket = os.getenv("INFLUXDB_BUCKET")
-        self.username = os.getenv("INFLUXDB_ADMIN_USERNAME")
-        self.password = os.getenv("INFLUXDB_ADMIN_PASSWORD")
-        self.client = None
-        self.write_api = None
-        self.query_api = None
-
-    def __enter__(self):
-        self.client = InfluxDBClient(url=self.url, token=self.token, org=self.org, username=self.username,
-                                     password=self.password)
-
-        self.write_api = self.client.write_api(write_options=SYNCHRONOUS)
-        self.query_api = self.client.query_api()
-        return self
-
-    def __exit__(self, exc_type, exc_val, exc_tb):
-        self.client.close()
+        write_api.write(get_env_variable("INFLUXDB_INIT_BUCKET"),
+                        get_env_variable("INFLUXDB_INIT_ORG"),
+                        points,
+                        write_precision=WritePrecision.MS)
 
 
 if __name__ == "__main__":
-    process_zip_files()
+    logger.info("--- DB CONNECTION ---")
+    logger.info(f"INFLUXDB_URL: {get_env_variable('INFLUXDB_URL')}")
+    logger.info(f"INFLUXDB_INIT_BUCKET: {get_env_variable('INFLUXDB_INIT_BUCKET')}")
+    logger.info(f"INFLUXDB_INIT_ORG: {get_env_variable('INFLUXDB_INIT_ORG')}")
+    logger.info("---------------------")
+
+    interval = 60 * 1  # Interval in seconds
+    next_run_time = time.time()
+
+    try:
+        while True:
+            if time.time() >= next_run_time:
+                logger.info("Processing zip files...")
+
+                process_zip_files()
+
+                next_run_time = time.time() + interval
+
+                logger.info(f"Next run in {interval} seconds")
+
+            time.sleep(1)
+    except KeyboardInterrupt:
+        logger.info("Exiting...")
