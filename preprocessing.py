@@ -18,6 +18,8 @@ logger = logging.getLogger(__name__)
 
 load_dotenv()
 
+PROCESSED_FILES_LOCAL = set()  # In-memory set to keep track of processed files
+
 COLUMN_MAPPINGS = {'accelerometer': ['time', 'z', 'y', 'x'],
                    'gyroscope': ['time', 'z', 'y', 'x'],
                    'gravity': ['time', 'z', 'y', 'x'],
@@ -193,6 +195,7 @@ def filter_measurement_files(measurement_files):
             mf.get_metadata()['device_name'] != 'iPhone X'
             and mf.get_label() is not None
             and mf.get_measurement_group() is not None
+            and mf.generate_file_hash() not in PROCESSED_FILES_LOCAL
             and not is_file_processed(mf.generate_file_hash())]
 
 
@@ -219,6 +222,11 @@ def process_measurement_file(measurement_file):
             process_sensor_data(sensor_name, sensor_data, measurement_file)
 
 
+def mark_file_as_processed(zip_file_path):
+    processed_file_path = f"{zip_file_path}.processed"
+    os.rename(zip_file_path, processed_file_path)
+
+
 def process_zip_files():
     data_folder = get_env_variable("DATA_FOLDER")
     measurement_files = create_measurement_files(data_folder)
@@ -226,6 +234,9 @@ def process_zip_files():
 
     for measurement_file in tqdm(filtered_files):
         process_measurement_file(measurement_file)
+        mark_file_as_processed(measurement_file.zip_file_path)
+
+        PROCESSED_FILES_LOCAL.add(measurement_file.generate_file_hash())
         logger.info(f"File {measurement_file} processed")
 
     logger.info("All files processed")
