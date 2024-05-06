@@ -9,8 +9,15 @@ services:
       - .env
     volumes:
       - influxdbv2:/var/lib/influxdb2:rw
+      - influxdb_config:/etc/influxdb2:rw
     ports:
       - "8086:8086"
+    environment:
+      - DOCKER_INFLUXDB_INIT_MODE=setup
+      - DOCKER_INFLUXDB_INIT_USERNAME=${INFLUXDB_ADMIN_USERNAME}
+      - DOCKER_INFLUXDB_INIT_PASSWORD=${INFLUXDB_ADMIN_PASSWORD}
+      - DOCKER_INFLUXDB_INIT_ORG=${INFLUXDB_INIT_ORG}
+      - DOCKER_INFLUXDB_INIT_BUCKET=${INFLUXDB_INIT_BUCKET}
 
   preprocessing:
     build: .
@@ -32,5 +39,6 @@ services:
 
 volumes:
   influxdbv2:
+  influxdb_config:
   filebrowserdb:
   filebrowserconfig:
