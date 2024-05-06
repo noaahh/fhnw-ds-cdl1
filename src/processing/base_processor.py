@@ -54,6 +54,10 @@ class BaseProcessor:
         start_time = data.index.min()
         end_time = data.index.max()
 
+        min_segment_length = max(segment_length, overlap_length)
+        if end_time - start_time < min_segment_length:
+            raise ValueError(f"Signal is too short to segment: {end_time - start_time} < {min_segment_length}")
+
         while start_time + segment_length <= end_time:  # TODO: check ways to use overlap in a better way in case the we are running out of data at the end of the signal
             segment_end = start_time + segment_length
             segment = data.loc[start_time:segment_end]
@@ -63,15 +67,12 @@ class BaseProcessor:
 
         segment_lengths = set([len(segment) for segment in segments])
         if len(segment_lengths) != 1:
-            raise ValueError("Segments are not of equal length")
+            raise ValueError(
+                f"Segments are not of equal length: {segment_lengths}. Number of segments: {len(segments)}. Start time: {start_time}. End time: {end_time}")
 
         return segments
 
     def extract(self, segment):
-
-        return segment
-
-    def scale(self, segment):
 
         return segment
 
@@ -82,7 +83,6 @@ class BaseProcessor:
 
         segments = self.segment(resampled_data)
         segments = [self.extract(segment) for segment in segments]
-        segments = [self.scale(segment) for segment in segments]
 
         if len(segments) == 0:
             raise ValueError("No segments found")
