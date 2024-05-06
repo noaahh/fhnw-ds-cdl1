@@ -4,8 +4,10 @@ import os
 import time
 
 import pandas as pd
+import typer
 from dotenv import load_dotenv
 from influxdb_client import Point, WritePrecision
+from joblib import Parallel, delayed
 from tqdm import tqdm
 
 from src.data.db import InfluxDBWrapper
@@ -86,20 +88,25 @@ def mark_file_as_processed(zip_file_path):
     os.rename(zip_file_path, processed_file_path)
 
 
-def process_zip_files():
-    data_folder = get_env_variable("DATA_FOLDER")
+def process_zip_files(data_folder, multi_threading, n_jobs):
     measurement_files = create_measurement_files(data_folder)
     filtered_files = filter_measurement_files(measurement_files)
     logger.debug(f"Found {len(filtered_files)} files to process.")
 
-    for measurement_file in tqdm(filtered_files):
-        process_measurement_file(measurement_file)
-        mark_file_as_processed(measurement_file.zip_file_path)
-
-        PROCESSED_FILES_LOCAL.add(measurement_file.generate_file_hash())
-        logger.info(f"File {measurement_file} processed")
+    if multi_threading:
+        Parallel(n_jobs=n_jobs)(delayed(process_and_mark_file)(mf) for mf in tqdm(filtered_files))
+    else:
+        for mf in tqdm(filtered_files):
+            process_and_mark_file(mf)
 
     logger.info("All files processed")
+
+
+def process_and_mark_file(measurement_file):
+    process_measurement_file(measurement_file)
+    mark_file_as_processed(measurement_file.zip_file_path)
+    PROCESSED_FILES_LOCAL.add(measurement_file.generate_file_hash())
+    logger.info(f"File {measurement_file} processed")
 
 
 def is_file_processed(file_hash):
@@ -145,34 +152,48 @@ def write_segments_to_db(measurement_file, segments_df):
                                batch_size=5000, protocol='line')
 
 
-if __name__ == "__main__":
-    logger.info("--- DB CONNECTION ---")
+def process_and_import(data_folder: str,
+                       run_periodically: bool = typer.Option(False, help="Enable periodic running of the process"),
+                       interval: int = typer.Option(60, help="Interval between runs in seconds"),
+                       multi_threading: bool = typer.Option(True, help="Enable multi-threading"),
+                       n_jobs: int = typer.Option(-1, help="Number of jobs to run in parallel")):
+    logger.info("--- PARAMETERS ---")
     logger.info(f"INFLUXDB_URL: {get_env_variable('INFLUXDB_URL')}")
     logger.info(f"INFLUXDB_INIT_BUCKET: {get_env_variable('INFLUXDB_INIT_BUCKET')}")
     logger.info(f"INFLUXDB_INIT_ORG: {get_env_variable('INFLUXDB_INIT_ORG')}")
-    logger.info("---------------------")
+    logger.info(f"Data folder: {data_folder}")
+    logger.info(f"Run periodically: {run_periodically}")
+    logger.info(f"Interval: {interval}")
+    logger.info(f"Multi-threading: {multi_threading}")
+    logger.info(f"Number of jobs: {n_jobs}")
+    logger.info("-------------------------\n")
 
-    interval = 60 * 1  # Interval in seconds
     next_run_time = time.time()
 
-    if RUN_PERIODICALLY:
+    if run_periodically:
         logger.info(f"Running every {interval} seconds")
         try:
-            while RUN_PERIODICALLY:
+            while True:
                 if time.time() >= next_run_time:
-                    logger.info("Processing zip files...")
+                    logger.info("Periodic run started")
 
-                    process_zip_files()
+                    start_time = time.time()
+                    process_zip_files(data_folder, multi_threading, n_jobs)
+                    logger.info(f"Processing took {time.time() - start_time:.2f} seconds")
 
                     next_run_time = time.time() + interval
-
                     logger.info(f"Next run in {interval} seconds")
 
                 time.sleep(1)
         except KeyboardInterrupt:
             logger.info("Exiting...")
-
     else:
-        process_zip_files()
+        start_time = time.time()
+        process_zip_files(data_folder, multi_threading, n_jobs)
+        logger.info(f"Processing took {time.time() - start_time:.2f} seconds")
 
     logger.info("Done!")
+
+
+if __name__ == "__main__":
+    typer.run(process_and_import)
