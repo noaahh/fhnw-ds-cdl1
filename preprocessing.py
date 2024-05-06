@@ -21,16 +21,17 @@ logger = logging.getLogger(__name__)
 load_dotenv()
 
 PROCESSED_FILES_LOCAL = set()  # In-memory set to keep track of processed files
-RUN_PERIODICALLY = False
 
 COLUMN_MAPPINGS = {'accelerometer': ['time', 'z', 'y', 'x'],
                    'gyroscope': ['time', 'z', 'y', 'x'],
                    'gravity': ['time', 'z', 'y', 'x'],
                    'orientation': ['time', 'yaw', 'qx', 'qz', 'roll', 'qw', 'qy', 'pitch']}
 
+VERBOSE = False
+
 
 def filter_measurement_files(measurement_files):
-    return [mf for mf in measurement_files if
+    return [mf for mf in tqdm(measurement_files, desc="Filtering files", unit="file") if
             mf.get_metadata()['device_name'] != 'iPhone X'
             and mf.get_label() is not None
             and mf.get_measurement_group() is not None
@@ -38,20 +39,27 @@ def filter_measurement_files(measurement_files):
             and not is_file_processed(mf.generate_file_hash())]
 
 
-def create_measurement_files(data_folder):
+def create_measurement_files(data_folder, multi_threading, n_jobs):
     zip_files = glob.glob(os.path.join(data_folder, "**", "*.zip"), recursive=True)
-    return [MeasurementFile(zip_path) for zip_path in zip_files]
+    if multi_threading:
+        with Parallel(n_jobs=n_jobs, prefer="threads") as parallel:
+            measurement_files = parallel(
+                delayed(lambda x: MeasurementFile(x))(zip_path) for zip_path in
+                tqdm(zip_files, desc="Reading files", unit="file"))
+    else:
+        measurement_files = [MeasurementFile(zip_path) for zip_path in
+                             tqdm(zip_files, desc="Reading files", unit="file")]
+    return measurement_files
 
 
 def merge_sensor_data(sensor_data):
-    merged_data = pd.DataFrame()  # Initialize an empty DataFrame for merging data
+    merged_data = pd.DataFrame()
 
     raw_data_length = {sensor: len(data) for sensor, data in sensor_data.items() if sensor in COLUMN_MAPPINGS}
     assert len(set(raw_data_length.values())) == 1, f"Data length mismatch: {raw_data_length}"
 
     for sensor_name, expected_cols in COLUMN_MAPPINGS.items():
         if sensor_name not in sensor_data:
-            logger.warning(f"Sensor {sensor_name} not found in data")
             continue
 
         data = sensor_data.get(sensor_name)
@@ -79,6 +87,11 @@ def merge_sensor_data(sensor_data):
 def process_measurement_file(measurement_file):
     sensor_data = measurement_file.get_sensor_data()
     merged_data = merge_sensor_data(sensor_data)
+
+    missing_sensors = set(COLUMN_MAPPINGS.keys()) - set(sensor_data.keys())
+    if missing_sensors:
+        logger.warning(f"File {measurement_file} is missing data for sensors: {missing_sensors}")
+
     segments = BaseProcessor(measurement_file).process(merged_data)
     write_segments_to_db(measurement_file, segments)
 
@@ -89,12 +102,13 @@ def mark_file_as_processed(zip_file_path):
 
 
 def process_zip_files(data_folder, multi_threading, n_jobs):
-    measurement_files = create_measurement_files(data_folder)
+    measurement_files = create_measurement_files(data_folder, multi_threading, n_jobs)
     filtered_files = filter_measurement_files(measurement_files)
     logger.debug(f"Found {len(filtered_files)} files to process.")
 
     if multi_threading:
-        Parallel(n_jobs=n_jobs)(delayed(process_and_mark_file)(mf) for mf in tqdm(filtered_files))
+        Parallel(n_jobs=n_jobs)(delayed(process_and_mark_file)(mf) for mf in
+                                tqdm(filtered_files, desc="Processing files", total=len(filtered_files), unit="file"))
     else:
         for mf in tqdm(filtered_files):
             process_and_mark_file(mf)
@@ -103,10 +117,16 @@ def process_zip_files(data_folder, multi_threading, n_jobs):
 
 
 def process_and_mark_file(measurement_file):
-    process_measurement_file(measurement_file)
-    # mark_file_as_processed(measurement_file.zip_file_path)
-    PROCESSED_FILES_LOCAL.add(measurement_file.generate_file_hash())
-    logger.info(f"File {measurement_file} processed")
+    try:
+        process_measurement_file(measurement_file)
+        logger.info(f"File {measurement_file} processed")
+    except Exception as e:
+        logger.error(f"Error processing file {measurement_file}:")
+        logger.error(e)
+        logger.error(f"Skipping file {measurement_file}")
+    finally:
+        # mark_file_as_processed(measurement_file.zip_file_path)
+        PROCESSED_FILES_LOCAL.add(measurement_file.generate_file_hash())
 
 
 def is_file_processed(file_hash):
@@ -156,7 +176,8 @@ def process_and_import(data_folder: str,
                        run_periodically: bool = typer.Option(False, help="Enable periodic running of the process"),
                        interval: int = typer.Option(60, help="Interval between runs in seconds"),
                        multi_threading: bool = typer.Option(True, help="Enable multi-threading"),
-                       n_jobs: int = typer.Option(-1, help="Number of jobs to run in parallel")):
+                       n_jobs: int = typer.Option(-1, help="Number of jobs to run in parallel"),
+                       verbose: bool = typer.Option(False, help="Enable verbose logging")):
     logger.info("--- PARAMETERS ---")
     logger.info(f"INFLUXDB_URL: {get_env_variable('INFLUXDB_URL')}")
     logger.info(f"INFLUXDB_INIT_BUCKET: {get_env_variable('INFLUXDB_INIT_BUCKET')}")
@@ -166,7 +187,12 @@ def process_and_import(data_folder: str,
     logger.info(f"Interval: {interval}")
     logger.info(f"Multi-threading: {multi_threading}")
     logger.info(f"Number of jobs: {n_jobs}")
+    logger.info(f"Verbose: {verbose}")
     logger.info("-------------------------\n")
+
+    global VERBOSE
+    VERBOSE = verbose
+    logger.disabled = not verbose
 
     next_run_time = time.time()
 

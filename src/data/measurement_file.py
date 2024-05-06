@@ -1,5 +1,4 @@
 import hashlib
-import logging
 import os
 import zipfile
 from pathlib import Path
@@ -8,8 +7,6 @@ import pandas as pd
 
 from src.data.label_mapping import MeasurementGroup, extract_label_from_file_name
 from src.helper import get_env_variable
-
-logger = logging.getLogger(__name__)
 
 
 class MeasurementFile:
@@ -21,8 +18,9 @@ class MeasurementFile:
         self.file_hash = self.generate_file_hash()
 
     def __repr__(self):
-        return (f"MeasurementFile(label={self.get_label()}, path={self.zip_file_path}, hash={self.file_hash}, "
-                f"measurement_group={self.get_measurement_group()}")
+        file_name = Path(self.zip_file_path).name
+        return (f"MeasurementFile(label={self.get_label()}, path={file_name}, hash={self.file_hash}, "
+                f"group={self.get_measurement_group()})")
 
     @staticmethod
     def validate_file(zip_file_path):
@@ -72,7 +70,7 @@ class MeasurementFile:
                     with z.open(f"{csv_filename}.csv") as f:
                         data[csv_filename.lower()] = pd.read_csv(f)
                 except KeyError:
-                    logger.warning(f"Warning: {csv_filename}.csv not found in {self.zip_file_path}")
+                    pass
 
         return data
 
