@@ -2,6 +2,7 @@ import hashlib
 import logging
 import os
 import zipfile
+from pathlib import Path
 
 import pandas as pd
 
@@ -34,10 +35,16 @@ class MeasurementFile:
         return extract_label_from_file_name(self.zip_file_path)
 
     def get_measurement_group(self):
-        if not self.zip_file_path.split("/")[-2].isdigit():
-            return None
+        path = Path(self.zip_file_path)
 
-        return MeasurementGroup(int(self.zip_file_path.split("/")[-2]))
+        try:
+            parent_dir = path.parts[-2]
+            if parent_dir.isdigit():
+                return MeasurementGroup(int(parent_dir))
+        except IndexError:
+            pass
+
+        return None
 
     def get_metadata(self):
         if not self.data:

@@ -12,7 +12,7 @@ class BaseProcessor:
         self.measurement_file = measurement_file
 
     def preprocess(self, data):
-        data = data.drop(columns=['seconds_elapsed'])
+        # data = data.drop(columns=['seconds_elapsed'])
         data['time'] = pd.to_datetime(data['time'], unit='ns')
         data = data.set_index('time', drop=True)
 

@@ -3,6 +3,7 @@ import logging
 import os
 import time
 
+import pandas as pd
 from dotenv import load_dotenv
 from influxdb_client import Point, WritePrecision
 from tqdm import tqdm
@@ -12,7 +13,7 @@ from src.data.measurement_file import MeasurementFile
 from src.helper import get_env_variable
 from src.processing.base_processor import BaseProcessor
 
-logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(message)s')
+logging.basicConfig(level=logging.DEBUG, format='%(asctime)s - %(levelname)s - %(message)s')
 logger = logging.getLogger(__name__)
 
 load_dotenv()
@@ -23,13 +24,7 @@ RUN_PERIODICALLY = False
 COLUMN_MAPPINGS = {'accelerometer': ['time', 'z', 'y', 'x'],
                    'gyroscope': ['time', 'z', 'y', 'x'],
                    'gravity': ['time', 'z', 'y', 'x'],
-                   'accelerometeruncalibrated': ['time', 'z', 'y', 'x'],
-                   'gyroscopeuncalibrated': ['time', 'z', 'y', 'x'],
                    'orientation': ['time', 'yaw', 'qx', 'qz', 'roll', 'qw', 'qy', 'pitch']}
-
-
-def get_processor(sensor_name, measurement_file):
-    return BaseProcessor(measurement_file)
 
 
 def filter_measurement_files(measurement_files):
@@ -46,22 +41,44 @@ def create_measurement_files(data_folder):
     return [MeasurementFile(zip_path) for zip_path in zip_files]
 
 
-def process_sensor_data(sensor_name, sensor_data, measurement_file):
-    processor = get_processor(sensor_name, measurement_file)
-    segments = processor.process(sensor_data)
+def merge_sensor_data(sensor_data):
+    merged_data = pd.DataFrame()  # Initialize an empty DataFrame for merging data
 
-    for i, segment in enumerate(segments):
-        segment_id = f"{sensor_name}_{i}"
-        write_segment(measurement_file, segment, sensor_name, segment_id)
+    raw_data_length = {sensor: len(data) for sensor, data in sensor_data.items() if sensor in COLUMN_MAPPINGS}
+    assert len(set(raw_data_length.values())) == 1, f"Data length mismatch: {raw_data_length}"
+
+    for sensor_name, expected_cols in COLUMN_MAPPINGS.items():
+        if sensor_name not in sensor_data:
+            logger.warning(f"Sensor {sensor_name} not found in data")
+            continue
+
+        data = sensor_data.get(sensor_name)
+        if not all(col in data.columns for col in expected_cols):
+            raise ValueError(f"Columns mismatch for sensor {sensor_name}: {data.columns} vs {expected_cols}")
+
+        data = data[expected_cols]
+        data = data.set_index('time')
+
+        data = data[[col for col in expected_cols if col in data.columns and col != 'time']]
+        data.columns = [f"{sensor_name}_{col}" for col in data.columns]
+
+        if merged_data.empty:
+            merged_data = data
+        else:
+            merged_data = pd.concat([merged_data, data], axis=1)
+
+    merged_data = merged_data.reset_index()
+
+    assert len(merged_data) == raw_data_length[
+        'accelerometer'], f"Data length mismatch after merging: {len(merged_data)} vs {raw_data_length['accelerometer']}"
+    return merged_data
 
 
 def process_measurement_file(measurement_file):
-    csv_file_names = get_env_variable("CSV_FILE_NAMES").split(",")
-    for csv_file_name in csv_file_names:
-        sensor_name = csv_file_name.lower()
-        sensor_data = measurement_file.get_sensor_data().get(sensor_name)
-        if sensor_data is not None:
-            process_sensor_data(sensor_name, sensor_data, measurement_file)
+    sensor_data = measurement_file.get_sensor_data()
+    merged_data = merge_sensor_data(sensor_data)
+    segments = BaseProcessor(measurement_file).process(merged_data)
+    write_segments_to_db(measurement_file, segments)
 
 
 def mark_file_as_processed(zip_file_path):
@@ -73,6 +90,7 @@ def process_zip_files():
     data_folder = get_env_variable("DATA_FOLDER")
     measurement_files = create_measurement_files(data_folder)
     filtered_files = filter_measurement_files(measurement_files)
+    logger.debug(f"Found {len(filtered_files)} files to process.")
 
     for measurement_file in tqdm(filtered_files):
         process_measurement_file(measurement_file)
@@ -98,32 +116,33 @@ def is_file_processed(file_hash):
         return False
 
 
-def write_segment(measurement_file, segment_df, sensor_name, segment_id):
-    points = []
-    with InfluxDBWrapper() as client:
-        write_api = client.write_api
+def write_segments_to_db(measurement_file, segments_df):
+    shared_segment_metadata = {
+        'label': measurement_file.get_label(),
+        'measurement_group': measurement_file.get_measurement_group().name,
+        'file_hash': measurement_file.generate_file_hash(),
+        **measurement_file.get_metadata()
+    }
 
-        for index, row in segment_df.iterrows():
-            point = Point(sensor_name).time(index, WritePrecision.MS)
+    all_points = []
+    for i, segment_df in enumerate(segments_df):
+        segment_metadata = {**shared_segment_metadata, 'segment_id': i}
 
-            for field in COLUMN_MAPPINGS.get(sensor_name, []):
-                if field in segment_df.columns and field != 'time':
-                    point = point.field(field, row.get(field, 0))
+        if not isinstance(segment_df.index, pd.DatetimeIndex):
+            segment_df.index = pd.to_datetime(segment_df.index)
 
-            point = point.tag("measurement_group", measurement_file.get_measurement_group().name)
-            point = point.tag("label", measurement_file.get_label())
-            point = point.tag("segment_id", segment_id)
-            point = point.tag("file_hash", measurement_file.generate_file_hash())
-
-            for k, v in measurement_file.get_metadata().items():
+        for idx in segment_df.index:
+            point = Point("segment").time(idx)
+            for k, v in segment_metadata.items():
                 point = point.tag(k, v)
+            for field, value in segment_df.loc[idx, segment_df.columns != 'time'].items():
+                point = point.field(field, value)
+            all_points.append(point)
 
-            points.append(point)
-
-        write_api.write(get_env_variable("INFLUXDB_INIT_BUCKET"),
-                        get_env_variable("INFLUXDB_INIT_ORG"),
-                        points,
-                        write_precision=WritePrecision.MS)
+    with InfluxDBWrapper() as client:
+        client.write_api.write(os.getenv("INFLUXDB_INIT_BUCKET"), os.getenv("INFLUXDB_INIT_ORG"),
+                               all_points, write_precision=WritePrecision.NS,
+                               batch_size=5000, protocol='line')
 
 
 if __name__ == "__main__":
