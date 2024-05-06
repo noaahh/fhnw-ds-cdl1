@@ -104,7 +104,7 @@ def process_zip_files(data_folder, multi_threading, n_jobs):
 
 def process_and_mark_file(measurement_file):
     process_measurement_file(measurement_file)
-    mark_file_as_processed(measurement_file.zip_file_path)
+    # mark_file_as_processed(measurement_file.zip_file_path)
     PROCESSED_FILES_LOCAL.add(measurement_file.generate_file_hash())
     logger.info(f"File {measurement_file} processed")
 
