@@ -136,17 +136,24 @@ if __name__ == "__main__":
     interval = 60 * 1  # Interval in seconds
     next_run_time = time.time()
 
-    try:
-        while RUN_PERIODICALLY:
-            if time.time() >= next_run_time:
-                logger.info("Processing zip files...")
+    if RUN_PERIODICALLY:
+        logger.info(f"Running every {interval} seconds")
+        try:
+            while RUN_PERIODICALLY:
+                if time.time() >= next_run_time:
+                    logger.info("Processing zip files...")
 
-                process_zip_files()
+                    process_zip_files()
 
-                next_run_time = time.time() + interval
+                    next_run_time = time.time() + interval
 
-                logger.info(f"Next run in {interval} seconds")
+                    logger.info(f"Next run in {interval} seconds")
 
-            time.sleep(1)
-    except KeyboardInterrupt:
-        logger.info("Exiting...")
+                time.sleep(1)
+        except KeyboardInterrupt:
+            logger.info("Exiting...")
+
+    else:
+        process_zip_files()
+
+    logger.info("Done!")
