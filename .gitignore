@@ -1,10 +1,7 @@
 .venv
 .env
-data/*.zip
-data/*.csv
 .DS_Store
 .idea/
 
 __pycache__/
-
-data/
+/data/
