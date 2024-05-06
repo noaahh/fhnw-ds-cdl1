@@ -21,7 +21,7 @@ class InfluxDBWrapper:
 
     def __enter__(self):
         self.client = InfluxDBClient(url=self.url, token=self.token, org=self.org, username=self.username,
-                                     password=self.password, timeout=30_000, retries=3, debug=False, enable_gzip=True)
+                                     password=self.password, timeout=120_000, retries=3, debug=False, enable_gzip=True)
 
         self.write_api = self.client.write_api(write_options=SYNCHRONOUS)
         self.query_api = self.client.query_api()
