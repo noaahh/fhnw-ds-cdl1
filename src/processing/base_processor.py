@@ -1,8 +1,10 @@
 import logging
 
 import pandas as pd
+import numpy as np
 
 from src.helper import get_env_variable
+from src.processing.extraction.fft import calculate_metrics, FFTMetrics
 
 logger = logging.getLogger(__name__)
 
@@ -73,8 +75,23 @@ class BaseProcessor:
         return segments
 
     def extract(self, segment):
+        segment = segment.copy()
+        features = {}
+        
+        for sensor in segment.columns:
+            features[sensor] = {}
+            signal = segment[sensor].values
+            fft_metrics = calculate_metrics(signal, 
+                                            sampling_rate=get_env_variable("RESAMPLE_RATE_HZ"),
+                                            metrics_list=[FFTMetrics.DOMINANT_FREQUENCY, 
+                                                          FFTMetrics.SPECTRAL_ENERGY,
+                                                          FFTMetrics.SPECTRAL_CENTROID])
+            
+            for key, value in fft_metrics.items():  
+                features[sensor][key] = value
 
-        return segment
+        return features
+
 
     def process(self, data):
         preprocessed_data = self.preprocess(data)
@@ -82,9 +99,9 @@ class BaseProcessor:
         resampled_data = self.resample(cropped_data)
 
         segments = self.segment(resampled_data)
-        segments = [self.extract(segment) for segment in segments]
-
+        extracted_features = [self.extract(segment) for segment in segments]
+        
         if len(segments) == 0:
             raise ValueError("No segments found")
 
-        return segments
+        return segments, extracted_features
