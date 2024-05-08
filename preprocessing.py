@@ -5,6 +5,7 @@ import os
 import time
 
 import pandas as pd
+import typer
 from dotenv import load_dotenv
 from influxdb_client import Point, WritePrecision
 from joblib import Parallel, delayed
@@ -15,17 +16,15 @@ from src.data.measurement_file import MeasurementFile
 from src.helper import get_env_variable
 from src.processing.base_processor import BaseProcessor
 
-# Set up logging
+app = typer.Typer()
+
 logging.basicConfig(level=logging.DEBUG, format='%(asctime)s - %(levelname)s - %(message)s')
 logger = logging.getLogger(__name__)
 
-# Load environment variables
 load_dotenv()
 
-# Initialize set for processed files
 PROCESSED_FILES_LOCAL = set()
 
-# Define column mappings for different sensors
 COLUMN_MAPPINGS = {
     'accelerometer': ['time', 'z', 'y', 'x'],
     'gyroscope': ['time', 'z', 'y', 'x'],
@@ -33,10 +32,8 @@ COLUMN_MAPPINGS = {
     'orientation': ['time', 'yaw', 'qx', 'qz', 'roll', 'qw', 'qy', 'pitch']
 }
 
-# Verbose flag
 VERBOSE = False
 
-import logging
 
 def setup_logging(verbose: bool):
     """
@@ -50,7 +47,7 @@ def setup_logging(verbose: bool):
     logger.disabled = not verbose
     return logger
 
-# Define functions
+
 def filter_measurement_files(measurement_files):
     """Filters out measurement files based on specific criteria."""
     return [mf for mf in tqdm(measurement_files, desc="Filtering files", unit="file") if
@@ -60,14 +57,17 @@ def filter_measurement_files(measurement_files):
             mf.generate_file_hash() not in PROCESSED_FILES_LOCAL and
             not is_file_processed(mf.generate_file_hash())]
 
+
 def create_measurement_files(data_folder, multi_threading, n_jobs):
     """Creates measurement files from zip files in the given directory."""
     zip_files = glob.glob(os.path.join(data_folder, "**", "*.zip"), recursive=True)
     if multi_threading:
         with Parallel(n_jobs=n_jobs, prefer="threads") as parallel:
-            return parallel(delayed(lambda x: MeasurementFile(x))(zip_path) for zip_path in tqdm(zip_files, desc="Reading files", unit="file"))
+            return parallel(delayed(lambda x: MeasurementFile(x))(zip_path) for zip_path in
+                            tqdm(zip_files, desc="Reading files", unit="file"))
     else:
         return [MeasurementFile(zip_path) for zip_path in tqdm(zip_files, desc="Reading files", unit="file")]
+
 
 def merge_sensor_data(sensor_data):
     """Merges sensor data from different sensors into a single DataFrame."""
@@ -86,8 +86,10 @@ def merge_sensor_data(sensor_data):
             merged_data = pd.concat([merged_data, data], axis=1) if not merged_data.empty else data
 
     merged_data = merged_data.reset_index()
-    assert len(merged_data) == raw_data_length['accelerometer'], f"Data length mismatch after merging: {len(merged_data)} vs {raw_data_length['accelerometer']}"
+    assert len(merged_data) == raw_data_length[
+        'accelerometer'], f"Data length mismatch after merging: {len(merged_data)} vs {raw_data_length['accelerometer']}"
     return merged_data
+
 
 def process_measurement_file(measurement_file):
     """Processes a single measurement file."""
@@ -99,17 +101,20 @@ def process_measurement_file(measurement_file):
     segments = BaseProcessor(measurement_file).process(merged_data)
     write_segments_to_db(measurement_file, segments)
 
+
 def process_zip_files(data_folder, multi_threading, n_jobs):
     """Processes all zip files in the specified data folder."""
     measurement_files = create_measurement_files(data_folder, multi_threading, n_jobs)
     filtered_files = filter_measurement_files(measurement_files)
     logger.debug(f"Found {len(filtered_files)} files to process.")
     if multi_threading:
-        Parallel(n_jobs=n_jobs)(delayed(process_and_mark_file)(mf) for mf in tqdm(filtered_files, desc="Processing files", total=len(filtered_files), unit="file"))
+        Parallel(n_jobs=n_jobs)(delayed(process_and_mark_file)(mf) for mf in
+                                tqdm(filtered_files, desc="Processing files", total=len(filtered_files), unit="file"))
     else:
         for mf in tqdm(filtered_files):
             process_and_mark_file(mf)
     logger.info("All files processed")
+
 
 def process_and_mark_file(measurement_file):
     """Processes and marks a measurement file as processed."""
@@ -122,6 +127,7 @@ def process_and_mark_file(measurement_file):
     finally:
         PROCESSED_FILES_LOCAL.add(measurement_file.generate_file_hash())
 
+
 def is_file_processed(file_hash):
     """Checks if a file has been processed by querying InfluxDB."""
     query = (f'from(bucket: "{os.getenv("INFLUXDB_INIT_BUCKET")}") |> range(start: -900d) |> filter(fn: (r) => '
@@ -129,6 +135,7 @@ def is_file_processed(file_hash):
     with InfluxDBWrapper() as influx:
         result = influx.query_api.query(query=query, org=os.getenv("INFLUXDB_INIT_ORG"))
         return any(True for _ in result)
+
 
 def write_segments_to_db(measurement_file, segments_df):
     """Writes processed segments to InfluxDB."""
@@ -151,11 +158,9 @@ def write_segments_to_db(measurement_file, segments_df):
                 point = point.field(field, value)
             all_points.append(point)
     with InfluxDBWrapper() as client:
-        client.write_api.write(os.getenv("INFLUXDB_INIT_BUCKET"), os.getenv("INFLUXDB_INIT_ORG"), all_points, write_precision=WritePrecision.NS, batch_size=5000, protocol='line')
+        client.write_api.write(os.getenv("INFLUXDB_INIT_BUCKET"), os.getenv("INFLUXDB_INIT_ORG"), all_points,
+                               write_precision=WritePrecision.NS, batch_size=5000, protocol='line')
 
-import typer
-
-app = typer.Typer()
 
 @app.command()
 def process_and_import(data_folder: str,
@@ -202,8 +207,10 @@ def process_and_import(data_folder: str,
 
     logger.info("Done!")
 
+
 def main():
     app()
+
 
 if __name__ == "__main__":
     main()

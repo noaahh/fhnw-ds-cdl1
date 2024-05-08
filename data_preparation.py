@@ -22,13 +22,16 @@ app = typer.Typer()
 logging.basicConfig(level=logging.DEBUG, format='%(asctime)s - %(levelname)s - %(message)s')
 logger = logging.getLogger(__name__)
 
+
 def setup_logging(verbose: bool):
     """Set up logging configuration based on verbosity."""
     level = logging.DEBUG if verbose else logging.INFO
     logger.setLevel(level)
     logger.disabled = not verbose
 
+
 load_dotenv()
+
 
 def query_segments(use_cache: bool) -> pd.DataFrame:
     """Query segment data from InfluxDB or load from cache."""
@@ -58,6 +61,7 @@ def query_segments(use_cache: bool) -> pd.DataFrame:
     df.to_parquet(cache_path)
     return df
 
+
 def preprocess_data(df: pd.DataFrame) -> pd.DataFrame:
     """Clean the DataFrame by removing unwanted columns and handling missing values."""
     initial_length = len(df)
@@ -73,6 +77,7 @@ def preprocess_data(df: pd.DataFrame) -> pd.DataFrame:
     df.drop(columns=unwanted_columns, inplace=True)
     df.reset_index(drop=True, inplace=True)
     return df
+
 
 def extract_features_for_segment(df, segment_id, columns, moving_window_size, use_fft, use_pears_corr):
     """Extract features for a specific segment with optimized pandas operations."""
@@ -101,6 +106,7 @@ def extract_features_for_segment(df, segment_id, columns, moving_window_size, us
 
     return pd.DataFrame(segment_features, index=segment.index)
 
+
 def extract_features(df: pd.DataFrame, multi_processing: bool, n_jobs: int,
                      moving_window_size_s: float, use_fft: bool, use_pears_corr: bool) -> pd.DataFrame:
     """Extract features from DataFrame using optimized parallel processing."""
@@ -124,6 +130,7 @@ def extract_features(df: pd.DataFrame, multi_processing: bool, n_jobs: int,
     assert len(df) == len_before, f"Data length mismatch after feature extraction: {len(df)} vs {len_before}"
     return df
 
+
 def split_data(df: pd.DataFrame, val_size: float, n_splits: int = None) -> tuple | list:
     """Split data into train and validation sets or perform K-fold split."""
     grouped = df.groupby('id').first().reset_index()
@@ -146,6 +153,7 @@ def split_data(df: pd.DataFrame, val_size: float, n_splits: int = None) -> tuple
         val_mask = df['id'].isin(val_ids)
         return df[train_mask], df[val_mask]
 
+
 def get_scaler(scaler_type: str) -> object:
     """Select the appropriate scaler based on the input type."""
     scalers = {
@@ -154,6 +162,7 @@ def get_scaler(scaler_type: str) -> object:
         'robust': RobustScaler()
     }
     return scalers.get(scaler_type, StandardScaler())
+
 
 def scale_data(X_train: pd.DataFrame,
                X_val: pd.DataFrame,
@@ -164,6 +173,7 @@ def scale_data(X_train: pd.DataFrame,
     X_train.loc[:, float_columns] = scaler.fit_transform(X_train[float_columns])
     X_val.loc[:, float_columns] = scaler.transform(X_val[float_columns])
     return X_train, X_val
+
 
 def transform_data(X_train: pd.DataFrame,
                    X_val: pd.DataFrame,
@@ -183,6 +193,7 @@ def transform_data(X_train: pd.DataFrame,
 
     return X_train, X_val
 
+
 def save_partitions(X_train: pd.DataFrame, X_val: pd.DataFrame, paths: dict) -> None:
     """Save the training and validation data to disk."""
     for path in paths.values():
@@ -196,6 +207,7 @@ def save_partitions(X_train: pd.DataFrame, X_val: pd.DataFrame, paths: dict) -> 
     X_train.to_parquet(paths['train'])
     X_val.to_parquet(paths['validate'])
 
+
 def scale_and_transform_data(X_train, X_val, scaler_type, pca_components):
     """Process data by scaling and possibly transforming with PCA."""
     X_train, X_val = scale_data(X_train, X_val, scaler_type)
@@ -205,6 +217,7 @@ def scale_and_transform_data(X_train, X_val, scaler_type, pca_components):
         logger.info(f"Number of nan values in X_train _time after PCA: {X_train['_time'].isna().sum()}")
 
     return X_train, X_val
+
 
 @app.command()
 def prep_data(validation_size: float = 0.2,
@@ -273,6 +286,7 @@ def prep_data(validation_size: float = 0.2,
         save_partitions(X_train, X_val, paths)
 
     logger.info("Data preparation completed.")
+
 
 if __name__ == "__main__":
     app()
