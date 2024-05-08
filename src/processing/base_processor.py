@@ -1,4 +1,5 @@
 import logging
+import os
 
 import pandas as pd
 import numpy as np
@@ -76,21 +77,35 @@ class BaseProcessor:
 
     def extract(self, segment):
         segment = segment.copy()
-        features = {}
         
-        for sensor in segment.columns:
-            features[sensor] = {}
-            signal = segment[sensor].values
-            fft_metrics = calculate_metrics(signal, 
-                                            sampling_rate=get_env_variable("RESAMPLE_RATE_HZ"),
-                                            metrics_list=[FFTMetrics.DOMINANT_FREQUENCY, 
-                                                          FFTMetrics.SPECTRAL_ENERGY,
-                                                          FFTMetrics.SPECTRAL_CENTROID])
-            
-            for key, value in fft_metrics.items():  
-                features[sensor][key] = value
+        fft_results = {sensor: {} for sensor in segment.columns}
 
-        return features
+        for sensor in segment.columns:
+            signal = segment[sensor].values
+            
+            res = calculate_metrics(
+                signal.tolist(), 
+                int(os.getenv("RESAMPLE_RATE_HZ")), 
+                [FFTMetrics.DOMINANT_FREQUENCY, FFTMetrics.SPECTRAL_CENTROID]
+            )
+            
+            fft_results[sensor] = res
+            print(res)
+
+        for sensor, metrics in fft_results.items():
+            for metric, value in metrics.items():
+                column_name = f"{sensor}_{metric}"
+                if isinstance(value, list):
+                    if len(value) == len(segment):
+                        segment[column_name] = value
+                    else:
+                        raise ValueError(
+                            f"Metric data length mismatch for column {column_name}."
+                        )
+                else:
+                    segment[column_name] = [value] * len(segment)
+        
+        return segment
 
 
     def process(self, data):
@@ -99,9 +114,9 @@ class BaseProcessor:
         resampled_data = self.resample(cropped_data)
 
         segments = self.segment(resampled_data)
-        extracted_features = [self.extract(segment) for segment in segments]
+        segments = [self.extract(segment) for segment in segments]
         
         if len(segments) == 0:
             raise ValueError("No segments found")
 
-        return segments, extracted_features
+        return segments
