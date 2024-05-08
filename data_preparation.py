@@ -5,12 +5,17 @@ import shutil
 import pandas as pd
 import typer
 from dotenv import load_dotenv
+from joblib import Parallel, delayed
 from sklearn.decomposition import PCA
 from sklearn.model_selection import train_test_split, KFold
 from sklearn.preprocessing import StandardScaler, MinMaxScaler, RobustScaler
+from tqdm import tqdm
 
 from src.data.db import InfluxDBWrapper
 from src.data.partition_helper import get_partition_paths
+from src.extraction.fft import extract_fft_features
+from src.extraction.moving_average import calculate_moving_average, calc_window_size
+from src.helper import get_env_variable
 
 logging.basicConfig(level=logging.DEBUG, format='%(asctime)s - %(levelname)s - %(message)s')
 logger = logging.getLogger(__name__)
@@ -30,9 +35,7 @@ def query_segments(use_cache: bool) -> pd.DataFrame:
         except FileNotFoundError:
             logger.warning("Cache file not found. Querying data from InfluxDB...")
 
-    influxdb_bucket = os.getenv('INFLUXDB_INIT_BUCKET', '')
-    assert influxdb_bucket, "InfluxDB bucket not set in environment variables."
-
+    influxdb_bucket = get_env_variable('INFLUXDB_INIT_BUCKET')
     with InfluxDBWrapper() as client:
         query_api = client.query_api
         query = f'''
@@ -50,24 +53,75 @@ def query_segments(use_cache: bool) -> pd.DataFrame:
 
 
 def preprocess_data(df: pd.DataFrame) -> pd.DataFrame:
-    """Preprocess the data by dropping unnecessary columns and handling duplicates."""
+    """Clean the DataFrame by removing unwanted columns and handling missing values."""
     initial_length = len(df)
     df.dropna(inplace=True)
     dropped_rows = initial_length - len(df)
     logger.info(f"Dropped {dropped_rows} rows with missing values.")
 
-    df['id'] = (df['segment_id'].astype(str) +
-                "_" + df['file_hash'])  # Combine segment_id and file_hash to create unique segment IDs across files
-
-    df.drop(
-        columns=['result', 'table', '_start', '_stop', '_measurement', 'device_id', 'segment_id', 'measurement_group',
-                 'platform', 'device_name', 'file_hash', 'app_version', 'recording_time'],
-        inplace=True)
+    # Creating a unique ID combining segment_id and file_hash
+    df['id'] = df['segment_id'].astype(str) + "_" + df['file_hash']
+    unwanted_columns = ['result', 'table', '_start', '_stop', '_measurement',
+                        'device_id', 'segment_id', 'measurement_group', 'platform',
+                        'device_name', 'file_hash', 'app_version', 'recording_time']
+    df.drop(columns=unwanted_columns, inplace=True)
     df.reset_index(drop=True, inplace=True)
     return df
 
 
-def split_data(df: pd.DataFrame, test_size: float, n_splits: int = None) -> tuple | list:
+def extract_features_for_segment(df, segment_id, columns, moving_window_size, use_fft, use_pears_corr):
+    """Extract features for a specific segment with optimized pandas operations."""
+    segment = df[df['id'] == segment_id]
+    segment_features = {}
+
+    for column in columns:
+        # FFT features
+        if use_fft:
+            fft_features = extract_fft_features(segment[column])
+            segment_features.update({
+                f'{column}_{k}': pd.Series([v] * len(segment), index=segment.index)
+                for k, v in fft_features.items()
+            })
+
+        # Moving average
+        if moving_window_size:
+            segment_features[f'{column}_moving_avg'] = calculate_moving_average(segment, column, moving_window_size)
+
+        # Pearson correlation
+        if use_pears_corr:
+            for other_column in columns:
+                if other_column != column:
+                    segment_features[f'{column}_{other_column}_correlation'] = segment[column].corr(
+                        segment[other_column])
+
+    return pd.DataFrame(segment_features, index=segment.index)
+
+
+def extract_features(df: pd.DataFrame, multi_processing: bool, n_jobs: int,
+                     moving_window_size_s: float, use_fft: bool, use_pears_corr: bool) -> pd.DataFrame:
+    """Extract features from DataFrame using optimized parallel processing."""
+    float_columns = df.select_dtypes(include=['float64']).columns
+    moving_window_size = calc_window_size(moving_window_size_s) if moving_window_size_s else None
+    segment_ids = df['id'].unique()
+
+    len_before = len(df)
+
+    if multi_processing:
+        results = Parallel(n_jobs=n_jobs)(delayed(extract_features_for_segment)(
+            df, segment_id, float_columns, moving_window_size, use_fft, use_pears_corr)
+                                          for segment_id in tqdm(segment_ids, desc="Extracting features"))
+    else:
+        results = [
+            extract_features_for_segment(df, segment_id, float_columns, moving_window_size, use_fft, use_pears_corr)
+            for segment_id in tqdm(segment_ids, desc="Extracting features")]
+
+    features_df = pd.concat(results, axis=0)
+    df = pd.concat([df, features_df], axis=1)
+    assert len(df) == len_before, f"Data length mismatch after feature extraction: {len(df)} vs {len_before}"
+    return df
+
+
+def split_data(df: pd.DataFrame, val_size: float, n_splits: int = None) -> tuple | list:
     """Split data into train and validation sets or perform K-fold split."""
     grouped = df.groupby('id').first().reset_index()
     assert grouped['id'].nunique() == len(grouped), "Duplicate IDs found in the dataset."
@@ -84,7 +138,7 @@ def split_data(df: pd.DataFrame, test_size: float, n_splits: int = None) -> tupl
 
         return folds
     else:
-        train_ids, val_ids = train_test_split(grouped['id'], test_size=test_size, stratify=grouped['label'])
+        train_ids, val_ids = train_test_split(grouped['id'], test_size=val_size, stratify=grouped['label'])
         train_mask = df['id'].isin(train_ids)
         val_mask = df['id'].isin(val_ids)
         return df[train_mask], df[val_mask]
@@ -100,24 +154,32 @@ def get_scaler(scaler_type: str) -> object:
     return scalers.get(scaler_type, StandardScaler())
 
 
-def standardize_data(X_train: pd.DataFrame,
-                     X_val: pd.DataFrame,
-                     scaler_type: str = 'standard',
-                     pca_components: int = None):
-    """Apply scaling and optional PCA to the training and validation data."""
+def scale_data(X_train: pd.DataFrame,
+               X_val: pd.DataFrame,
+               scaler_type: str = 'standard'):
+    """Apply scaling to the training and validation data."""
     scaler = get_scaler(scaler_type)
     float_columns = X_train.select_dtypes(include=['float64']).columns
     X_train.loc[:, float_columns] = scaler.fit_transform(X_train[float_columns])
     X_val.loc[:, float_columns] = scaler.transform(X_val[float_columns])
+    return X_train, X_val
 
-    if pca_components:
-        pca = PCA(n_components=pca_components)
-        X_train_pca = pca.fit_transform(X_train[float_columns])
-        X_val_pca = pca.transform(X_val[float_columns])
 
-        pca_columns = [f'pca_{i}' for i in range(pca_components)]
-        X_train = pd.concat([X_train, pd.DataFrame(X_train_pca, columns=pca_columns)], axis=1)
-        X_val = pd.concat([X_val, pd.DataFrame(X_val_pca, columns=pca_columns)], axis=1)
+def transform_data(X_train: pd.DataFrame,
+                   X_val: pd.DataFrame,
+                   pca_components: int):
+    """Apply PCA to the training and validation data."""
+    float_columns = X_train.select_dtypes(include=['float64']).columns
+
+    X_train_pca = X_train[float_columns].copy().fillna(0)
+    X_val_pca = X_val[float_columns].copy().fillna(0)
+
+    pca = PCA(n_components=pca_components)
+    X_train_pca = pca.fit_transform(X_train_pca)
+    X_val_pca = pca.transform(X_val_pca)
+    pca_columns = [f'pca_{i}' for i in range(pca_components)]
+    X_train = pd.concat([X_train, pd.DataFrame(X_train_pca, columns=pca_columns)], axis=1)
+    X_val = pd.concat([X_val, pd.DataFrame(X_val_pca, columns=pca_columns)], axis=1)
 
     return X_train, X_val
 
@@ -127,40 +189,95 @@ def save_partitions(X_train: pd.DataFrame, X_val: pd.DataFrame, paths: dict) -> 
     for path in paths.values():
         os.makedirs(os.path.dirname(path), exist_ok=True)
 
-    X_train.to_parquet(paths['train'])
-    X_val.to_parquet(paths['validate'])
-
     X_train['label'].to_frame().to_parquet(paths['train_labels'])
     X_val['label'].to_frame().to_parquet(paths['validate_labels'])
 
+    X_train = X_train.drop(columns='label')
+    X_val = X_val.drop(columns='label')
+    X_train.to_parquet(paths['train'])
+    X_val.to_parquet(paths['validate'])
 
-def prep_data(test_size: float = 0.2,
+
+def scale_and_transform_data(X_train, X_val, scaler_type, pca_components):
+    """Process data by scaling and possibly transforming with PCA."""
+    X_train, X_val = scale_data(X_train, X_val, scaler_type)
+    logger.info(f"Number of nan values in X_train _time: {X_train['_time'].isna().sum()}")
+    if pca_components:
+        X_train, X_val = transform_data(X_train, X_val, pca_components)
+        logger.info(f"Number of nan values in X_train _time after PCA: {X_train['_time'].isna().sum()}")
+
+    return X_train, X_val
+
+
+def prep_data(validation_size: float = 0.2,
               n_splits: int = typer.Option(None),
               scaler_type: str = typer.Option('standard'),
               pca_components: int = typer.Option(None),
+              moving_window_size_s: float = typer.Option(None),
+
+              fft: bool = typer.Option(False),
+              pearson_corr: bool = typer.Option(False),
+
               use_cache: bool = typer.Option(False),
               clear_output: bool = typer.Option(False),
               output_path: str = typer.Option('./data/splits'),
+              multi_processing: bool = typer.Option(False),
+              n_jobs: int = typer.Option(-1),
               verbose: bool = typer.Option(False)):
     logger.disabled = not verbose
+
+    logger.info("--- PARAMETERS ---")
+    logger.info(f"Validation set size: {validation_size}")
+    logger.info(f"Number of splits: {n_splits if n_splits else 'No Cross-Validation'}")
+    logger.info(f"Scaler type: {scaler_type}")
+    logger.info(f"Extract FFT features: {fft}")
+    logger.info(f"Extract Pearson correlation: {pearson_corr}")
+    logger.info(f"PCA components: {pca_components}")
+    logger.info(f"Moving window size: {moving_window_size_s}s")
+    logger.info(f"Use cache: {use_cache}")
+    logger.info(f"Clear output: {clear_output}")
+    logger.info(f"Output path: {output_path}")
+    logger.info(f"Multi-processing: {multi_processing}")
+    logger.info(f"Number of jobs: {n_jobs}")
+    logger.info(f"Verbose: {verbose}")
+    logger.info("--------------------\n")
+
+    if pca_components:
+        raise ValueError("PCA components not implemented yet.")
+
+    if not multi_processing:
+        logger.warning("Using single-threaded processing. This may take a while for more features.")
+
+    logger.info("Querying data...")
     df = query_segments(use_cache)
+
+    logger.info("Preprocessing data...")
     df = preprocess_data(df)
 
+    logger.info("Extracting features...")
+    df = extract_features(df, multi_processing, n_jobs, moving_window_size_s, fft, pearson_corr)
+
     if clear_output and os.path.exists(output_path):
+        logger.info(f"Clearing output directory: {output_path}")
         shutil.rmtree(output_path)
         os.makedirs(output_path, exist_ok=True)
 
+    logger.info("Splitting and processing data...")
     if n_splits:
         paths = get_partition_paths(output_path, n_splits)
-        folds = split_data(df, test_size, n_splits)
+        folds = split_data(df, validation_size, n_splits)
+
         for i, (X_train, X_val) in enumerate(folds):
-            X_train, X_val = standardize_data(X_train, X_val, scaler_type, pca_components)
+            X_train, X_val = scale_and_transform_data(X_train, X_val, scaler_type, pca_components)
             save_partitions(X_train, X_val, paths[i])
     else:
-        X_train, X_val = split_data(df, test_size)
-        X_train, X_val = standardize_data(X_train, X_val, scaler_type, pca_components)
+        X_train, X_val = split_data(df, validation_size)
+        X_train, X_val = scale_and_transform_data(X_train, X_val, scaler_type, pca_components)
+
         paths = get_partition_paths(output_path)
         save_partitions(X_train, X_val, paths)
+
+    logger.info("Data preparation completed.")
 
 
 if __name__ == "__main__":
