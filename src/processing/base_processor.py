@@ -1,8 +1,11 @@
 import logging
+import os
 
 import pandas as pd
+import numpy as np
 
 from src.helper import get_env_variable
+from src.processing.extraction.fft import calculate_metrics, FFTMetrics
 
 logger = logging.getLogger(__name__)
 
@@ -73,8 +76,37 @@ class BaseProcessor:
         return segments
 
     def extract(self, segment):
+        segment = segment.copy()
+        
+        fft_results = {sensor: {} for sensor in segment.columns}
 
+        for sensor in segment.columns:
+            signal = segment[sensor].values
+            
+            res = calculate_metrics(
+                signal.tolist(), 
+                int(os.getenv("RESAMPLE_RATE_HZ")), 
+                [FFTMetrics.DOMINANT_FREQUENCY, FFTMetrics.SPECTRAL_CENTROID]
+            )
+            
+            fft_results[sensor] = res
+            print(res)
+
+        for sensor, metrics in fft_results.items():
+            for metric, value in metrics.items():
+                column_name = f"{sensor}_{metric}"
+                if isinstance(value, list):
+                    if len(value) == len(segment):
+                        segment[column_name] = value
+                    else:
+                        raise ValueError(
+                            f"Metric data length mismatch for column {column_name}."
+                        )
+                else:
+                    segment[column_name] = [value] * len(segment)
+        
         return segment
+
 
     def process(self, data):
         preprocessed_data = self.preprocess(data)
@@ -83,7 +115,7 @@ class BaseProcessor:
 
         segments = self.segment(resampled_data)
         segments = [self.extract(segment) for segment in segments]
-
+        
         if len(segments) == 0:
             raise ValueError("No segments found")
 
