@@ -91,8 +91,9 @@ def process_measurement_file(measurement_file):
     missing_sensors = set(COLUMN_MAPPINGS.keys()) - set(sensor_data.keys())
     if missing_sensors:
         logger.warning(f"File {measurement_file} is missing data for sensors: {missing_sensors}")
-
+    
     segments = BaseProcessor(measurement_file).process(merged_data)
+    
     write_segments_to_db(measurement_file, segments)
 
 
@@ -150,10 +151,11 @@ def write_segments_to_db(measurement_file, segments_df):
         'file_hash': measurement_file.generate_file_hash(),
         **measurement_file.get_metadata()
     }
-
+    
     all_points = []
     for i, segment_df in enumerate(segments_df):
-        segment_metadata = {**shared_segment_metadata, 'segment_id': i}
+        segment_metadata = {**shared_segment_metadata, 
+                            'segment_id': i}
 
         if not isinstance(segment_df.index, pd.DatetimeIndex):
             segment_df.index = pd.to_datetime(segment_df.index)
