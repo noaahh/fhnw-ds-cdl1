@@ -2,7 +2,7 @@ import os
 
 import pandas as pd
 
-PARTITION_PATHS_KEYS = ['train', 'validate', 'train_labels', 'validate_labels']
+PARTITION_PATHS_KEYS = ['train', 'validate']
 
 
 def get_partition_paths(root_output_dir, k_folds=None):
@@ -14,16 +14,12 @@ def get_partition_paths(root_output_dir, k_folds=None):
 
             partition_paths.append({
                 'train': os.path.join(fold_dir, 'train.parquet'),
-                'validate': os.path.join(fold_dir, 'validate.parquet'),
-                'train_labels': os.path.join(fold_dir, 'train_labels.parquet'),
-                'validate_labels': os.path.join(fold_dir, 'validate_labels.parquet')
+                'validate': os.path.join(fold_dir, 'val.parquet')
             })
     else:
         partition_paths = {
             'train': os.path.join(root_output_dir, 'X_train.parquet'),
-            'validate': os.path.join(root_output_dir, 'X_val.parquet'),
-            'train_labels': os.path.join(root_output_dir, 'y_train.parquet'),
-            'validate_labels': os.path.join(root_output_dir, 'y_val.parquet')
+            'validate': os.path.join(root_output_dir, 'val.parquet')
         }
 
     return partition_paths

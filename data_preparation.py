@@ -164,59 +164,52 @@ def get_scaler(scaler_type: str) -> object:
     return scalers.get(scaler_type, StandardScaler())
 
 
-def scale_data(X_train: pd.DataFrame,
-               X_val: pd.DataFrame,
+def scale_data(train_data: pd.DataFrame,
+               val_data: pd.DataFrame,
                scaler_type: str = 'standard'):
     """Apply scaling to the training and validation data."""
     scaler = get_scaler(scaler_type)
-    float_columns = X_train.select_dtypes(include=['float64']).columns
-    X_train.loc[:, float_columns] = scaler.fit_transform(X_train[float_columns])
-    X_val.loc[:, float_columns] = scaler.transform(X_val[float_columns])
-    return X_train, X_val
+    float_columns = train_data.select_dtypes(include=['float64']).columns
+    train_data.loc[:, float_columns] = scaler.fit_transform(train_data[float_columns])
+    val_data.loc[:, float_columns] = scaler.transform(val_data[float_columns])
+    return train_data, val_data
 
 
-def transform_data(X_train: pd.DataFrame,
-                   X_val: pd.DataFrame,
+def transform_data(train_data: pd.DataFrame,
+                   val_data: pd.DataFrame,
                    pca_components: int):
     """Apply PCA to the training and validation data."""
-    float_columns = X_train.select_dtypes(include=['float64']).columns
+    float_columns = train_data.select_dtypes(include=['float64']).columns
 
-    X_train_pca = X_train[float_columns].copy().fillna(0)
-    X_val_pca = X_val[float_columns].copy().fillna(0)
+    X_train_pca = train_data[float_columns].copy().fillna(0)
+    X_val_pca = val_data[float_columns].copy().fillna(0)
 
     pca = PCA(n_components=pca_components)
     X_train_pca = pca.fit_transform(X_train_pca)
     X_val_pca = pca.transform(X_val_pca)
     pca_columns = [f'pca_{i}' for i in range(pca_components)]
-    X_train = pd.concat([X_train, pd.DataFrame(X_train_pca, columns=pca_columns)], axis=1)
-    X_val = pd.concat([X_val, pd.DataFrame(X_val_pca, columns=pca_columns)], axis=1)
+    train_data = pd.concat([train_data, pd.DataFrame(X_train_pca, columns=pca_columns)], axis=1)
+    val_data = pd.concat([val_data, pd.DataFrame(X_val_pca, columns=pca_columns)], axis=1)
 
-    return X_train, X_val
+    return train_data, val_data
 
 
-def save_partitions(X_train: pd.DataFrame, X_val: pd.DataFrame, paths: dict) -> None:
+def save_partitions(train_data: pd.DataFrame, val_data: pd.DataFrame, paths: dict) -> None:
     """Save the training and validation data to disk."""
     for path in paths.values():
         os.makedirs(os.path.dirname(path), exist_ok=True)
 
-    X_train['label'].to_frame().to_parquet(paths['train_labels'])
-    X_val['label'].to_frame().to_parquet(paths['validate_labels'])
-
-    X_train = X_train.drop(columns='label')
-    X_val = X_val.drop(columns='label')
-    X_train.to_parquet(paths['train'])
-    X_val.to_parquet(paths['validate'])
+    train_data.to_parquet(paths['train'])
+    val_data.to_parquet(paths['validate'])
 
 
-def scale_and_transform_data(X_train, X_val, scaler_type, pca_components):
+def scale_and_transform_data(train_data, val_data, scaler_type, pca_components):
     """Process data by scaling and possibly transforming with PCA."""
-    X_train, X_val = scale_data(X_train, X_val, scaler_type)
-    logger.info(f"Number of nan values in X_train _time: {X_train['_time'].isna().sum()}")
+    train_data, val_data = scale_data(train_data, val_data, scaler_type)
     if pca_components:
-        X_train, X_val = transform_data(X_train, X_val, pca_components)
-        logger.info(f"Number of nan values in X_train _time after PCA: {X_train['_time'].isna().sum()}")
+        train_data, val_data = transform_data(train_data, val_data, pca_components)
 
-    return X_train, X_val
+    return train_data, val_data
 
 
 @app.command()
@@ -275,15 +268,15 @@ def prep_data(validation_size: float = 0.2,
         paths = get_partition_paths(output_path, n_splits)
         folds = split_data(df, validation_size, n_splits)
 
-        for i, (X_train, X_val) in enumerate(folds):
-            X_train, X_val = scale_and_transform_data(X_train, X_val, scaler_type, pca_components)
-            save_partitions(X_train, X_val, paths[i])
+        for i, (train_data, val_data) in enumerate(folds):
+            train_data, val_data = scale_and_transform_data(train_data, val_data, scaler_type, pca_components)
+            save_partitions(train_data, val_data, paths[i])
     else:
-        X_train, X_val = split_data(df, validation_size)
-        X_train, X_val = scale_and_transform_data(X_train, X_val, scaler_type, pca_components)
+        train_data, val_data = split_data(df, validation_size)
+        train_data, val_data = scale_and_transform_data(train_data, val_data, scaler_type, pca_components)
 
         paths = get_partition_paths(output_path)
-        save_partitions(X_train, X_val, paths)
+        save_partitions(train_data, val_data, paths)
 
     logger.info("Data preparation completed.")
 
