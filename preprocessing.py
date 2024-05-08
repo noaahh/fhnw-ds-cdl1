@@ -178,6 +178,10 @@ def process_and_import(data_folder: str,
                        multi_threading: bool = typer.Option(True, help="Enable multi-threading"),
                        n_jobs: int = typer.Option(-1, help="Number of jobs to run in parallel"),
                        verbose: bool = typer.Option(False, help="Enable verbose logging")):
+    global VERBOSE
+    VERBOSE = verbose
+    logger.disabled = not verbose
+
     logger.info("--- PARAMETERS ---")
     logger.info(f"INFLUXDB_URL: {get_env_variable('INFLUXDB_URL')}")
     logger.info(f"INFLUXDB_INIT_BUCKET: {get_env_variable('INFLUXDB_INIT_BUCKET')}")
@@ -189,10 +193,6 @@ def process_and_import(data_folder: str,
     logger.info(f"Number of jobs: {n_jobs}")
     logger.info(f"Verbose: {verbose}")
     logger.info("-------------------------\n")
-
-    global VERBOSE
-    VERBOSE = verbose
-    logger.disabled = not verbose
 
     next_run_time = time.time()
 
