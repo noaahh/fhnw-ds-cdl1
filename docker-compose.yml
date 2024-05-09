@@ -23,7 +23,7 @@ services:
     build: .
     restart: unless-stopped
     command:
-      - python /app/import.py --raw_data_dir "data/raw" --verbose --run-periodically
+      - python /app/import.py --raw-data-dir "data/raw" --verbose --run-periodically
     env_file:
       - .env
     volumes:
