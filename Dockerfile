@@ -6,7 +6,7 @@ COPY ./preprocessing.py /app
 COPY ./src /app/src
 COPY ./requirements.txt /app
 
-RUN pip install --upgrade pip
-RUN pip install --no-cache-dir -r requirements.txt
+RUN pip3 install --upgrade pip
+RUN pip3 install --no-cache-dir -r requirements.txt
 
 CMD ["python", "/app/preprocessing.py"]
