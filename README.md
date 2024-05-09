@@ -1,5 +1,38 @@
 # cdl1: Sensor Based Activity Recognition
 
+## Docker setup
+
+To run the InfluxDB from the docker compose file, execute the following command:
+
+```bash
+docker-compose up -d influxdb
+```
+
+This will start the InfluxDB service in the background and configures it with the variables defined in the `.env` file.
+
+## Logistics for data import
+
+The raw data from the SensorLogger app should be placed and structured as follows to align with the default settings of
+the provided scripts:
+
+```
+data
+├── raw
+│   ├── 2 (Measurement Group)
+│   │   ├── walking_2021-01-01_12-00-00.zip
+│   │   ├── walking_2021-01-01_12-10-00.zip
+│   │   ├── ...
+│   ├── ...
+```
+
+The `raw` directory contains subdirectories named after the measurement groups. Each measurement group directory
+contains zip files with sensor data for different activities. If the subdirectories are not named after the measurement
+groups, the group will be deemed as `NO GROUP`. The defined measurement groups are defined in
+the `src/data/label_mapping.py` file.
+
+The zip files should be named according to the activity with an underscore-separated timestamp. The mapping of labels is
+also defined in the `src/data/label_mapping.py` file.
+
 ## Scripts
 
 Each scripts available parameters can be displayed by running the script with the `--help` flag.
