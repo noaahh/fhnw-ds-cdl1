@@ -2,8 +2,8 @@ FROM python:3.11-slim
 
 WORKDIR /app
 
-COPY ./data_preparation.py /app
-COPY ./preprocessing.py /app
+COPY data_pipeline.py /app
+COPY import.py /app
 COPY ./src /app/src
 
 COPY ./requirements.txt /app

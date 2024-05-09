@@ -3,6 +3,7 @@ from enum import Enum
 
 
 class MeasurementGroup(Enum):
+    NO_GROUP = 0
     GRUPPE1 = 1
     GRUPPE2 = 2
     GRUPPE3 = 3

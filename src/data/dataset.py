@@ -30,29 +30,29 @@ class SensorDatasetSKLearn:
 
     def __init__(self, data_df):
         self.data_df = self._preprocess_data(data_df)
-        self.labels = self.data_df.groupby('id')[self.LABEL_COLUMN].first().values
-        # Drop the label column after saving labels
+        self.labels = self.data_df.groupby('segment_id')[self.LABEL_COLUMN].first().values
         self.data_df = self.data_df.drop(columns=[self.LABEL_COLUMN])
 
     @staticmethod
     def _preprocess_data(data_df):
         if not pd.api.types.is_datetime64_any_dtype(data_df['_time']):
             data_df['_time'] = pd.to_datetime(data_df['_time'])
-        data_df.sort_values(['id', '_time'], inplace=True)
+        data_df.sort_values(['segment_id', '_time'], inplace=True)
         data_df.drop(columns=['_time'], inplace=True)
         return data_df
 
     def get_data(self):
-        nunique = self.data_df.groupby('id').nunique()
+        nunique = self.data_df.groupby('segment_id').nunique()
 
         single_value_columns = nunique.columns[nunique.max() == 1].tolist()
         multi_value_columns = nunique.columns[nunique.max() > 1].tolist()
 
-        single_value_df = self.data_df.groupby('id')[single_value_columns].first().reset_index(drop=True)
+        single_value_df = self.data_df.groupby('segment_id')[single_value_columns].first().reset_index(drop=True)
 
         if multi_value_columns:
-            self.data_df['time_idx'] = self.data_df.groupby('id').cumcount()
-            multi_value_df = self.data_df.set_index(['id', 'time_idx'])[multi_value_columns].unstack(fill_value=0)
+            self.data_df['time_idx'] = self.data_df.groupby('segment_id').cumcount()
+            multi_value_df = (self.data_df.set_index(['segment_id', 'time_idx'])[multi_value_columns]
+                              .unstack(fill_value=0))
             multi_value_df.columns = [f"{col[0]}_{col[1]}" for col in multi_value_df.columns]
             multi_value_df.reset_index(drop=True, inplace=True)
             processed_df = pd.concat([single_value_df, multi_value_df], axis=1)

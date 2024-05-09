@@ -19,11 +19,11 @@ services:
       - DOCKER_INFLUXDB_INIT_ORG=${INFLUXDB_INIT_ORG}
       - DOCKER_INFLUXDB_INIT_BUCKET=${INFLUXDB_INIT_BUCKET}
 
-  preprocessing:
+  import_db:
     build: .
     restart: unless-stopped
     command:
-      - python /app/preprocessing.py "data" --verbose --run-periodically
+      - python /app/import.py --raw-data-dir "data/raw" --verbose --run-periodically
     env_file:
       - .env
     volumes:

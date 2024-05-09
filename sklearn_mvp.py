@@ -32,7 +32,7 @@ def train_and_evaluate_model(data_partitions, model: BaseEstimator, metrics: dic
     print(avg_results)
 
 
-data = get_partitioned_data(get_partition_paths("./data/splits", k_folds=5))
+data = get_partitioned_data(get_partition_paths("./data/partitions", k_folds=5))
 
 model = LogisticRegression(random_state=1337, max_iter=1000)
 metrics = {
