@@ -49,7 +49,7 @@ class MeasurementFile:
         except IndexError:
             pass
 
-        return None
+        return MeasurementGroup.NO_GROUP
 
     def get_metadata(self):
         if not self.data:
