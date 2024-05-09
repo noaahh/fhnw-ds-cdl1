@@ -22,6 +22,8 @@ services:
   preprocessing:
     build: .
     restart: unless-stopped
+    command:
+      - python /app/preprocessing.py "data" --verbose --run-periodically
     env_file:
       - .env
     volumes:
