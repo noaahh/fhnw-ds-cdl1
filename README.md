@@ -68,10 +68,10 @@ Run the script with the `--help` flag to see all available options.
 python import.py --help
 ```
 
-#### pipeline.py
+#### data_pipeline.py
 
-The `pipeline.py` script is a comprehensive data preprocessing tool that prepares the imported sensor data for further
-analysis and modeling. It performs a series of preprocessing steps such as cropping the data to remove unwanted
+The `data_pipeline.py` script is a comprehensive data preprocessing tool that prepares the imported sensor data for
+further analysis and modeling. It performs a series of preprocessing steps such as cropping the data to remove unwanted
 segments, resampling the data to a consistent rate, and dividing the data into segments with specified overlaps. It also
 provides options for feature extraction like FFT (Fast Fourier Transform) and Pearson correlation calculations. Advanced
 settings include options for data scaling, dimensionality reduction using PCA, and handling of output data in various
@@ -80,21 +80,19 @@ ways.
 To execute the script using default settings defined by environment variables:
 
 ```bash
-python pipeline.py --output-dir "data/partitions"
+python data_pipeline.py --output-dir "data/partitions"
 ```
 
 **Parameters**:
 This script offers a wide range of configurable parameters, allowing fine-tuning of the preprocessing steps:
 
-- `--crop_start_seconds` and `--crop_end_seconds`: Define how many seconds to crop at the beginning and end of each
-  signal.
+- `--crop_start_s` and `--crop_end_s`: Define how many seconds to crop at the beginning and end of each signal.
 - `--resample_rate_hz`: Set the resampling rate in Hz.
-- `--segment_size_seconds` and `--overlap_seconds`: Specify the size of each data segment and the overlap between
-  segments.
+- `--segment_size_s` and `--overlap_s`: Specify the size of each data segment and the overlap between segments.
 - Feature calculations can be toggled with `--fft` for FFT features and `--pearson_corr` for Pearson correlation.
 
 Run the script with the `--help` flag to see all available options.
 
 ```bash
-python pipeline.py --help
+python data_pipeline.py --help
 ```

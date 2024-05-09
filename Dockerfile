@@ -2,7 +2,7 @@ FROM python:3.11-slim
 
 WORKDIR /app
 
-COPY pipeline.py /app
+COPY data_pipeline.py /app
 COPY import.py /app
 COPY ./src /app/src
 

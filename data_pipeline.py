@@ -13,6 +13,7 @@ from sklearn.preprocessing import StandardScaler, MinMaxScaler, RobustScaler
 from tqdm import tqdm
 
 from src.data.db import InfluxDBWrapper
+from src.data.measurement_file import MeasurementFile
 from src.data.partition_helper import get_partition_paths
 from src.extraction.fft import extract_fft_features
 from src.extraction.moving_average import calculate_moving_average, calc_window_size
@@ -32,6 +33,18 @@ def setup_logging(verbose: bool):
 
 
 load_dotenv()
+
+
+def load_single_file_data(zip_file_path):
+    """Load a single measurement file from a zip archive."""
+    file = MeasurementFile(zip_file_path)
+    file_data = file.get_sensor_data()
+    file_data['file_hash'] = file.generate_file_hash()
+    file_data['label'] = file.get_label()
+    file_data.rename(columns={'time': '_time'}, inplace=True)
+    file_data['_time'] = pd.to_datetime(file_data['_time'], unit='ns')
+    file_data.reset_index(drop=True, inplace=True)
+    return file_data
 
 
 def query_raw_data(use_cache: bool) -> pd.DataFrame:
@@ -76,7 +89,7 @@ def prepare_time_series_segments(data: pd.DataFrame,
     unwanted_columns = ['result', 'table', '_start', '_stop', '_measurement',
                         'device_id', 'measurement_group', 'platform',
                         'device_name', 'app_version', 'recording_time']
-    data.drop(columns=unwanted_columns, inplace=True)
+    data.drop(columns=unwanted_columns, inplace=True, errors='ignore')
 
     data['_time'] = pd.to_datetime(data['_time'], unit='ns')
     data = data.set_index('_time', drop=True)
@@ -269,15 +282,15 @@ def scale_and_transform_data(train_data, val_data, scaler_type, pca_components):
 
 
 @app.command()
-def pipeline(crop_start_seconds: float = typer.Option(get_env_variable('START_CROP_SECONDS'),
-                                                      help="Seconds to crop from the start of each signal"),
-             crop_end_seconds: float = typer.Option(get_env_variable('END_CROP_SECONDS'),
-                                                    help="Seconds to crop from the end of each signal"),
+def pipeline(crop_start_s: float = typer.Option(get_env_variable('START_CROP_SECONDS'),
+                                                help="Seconds to crop from the start of each signal"),
+             crop_end_s: float = typer.Option(get_env_variable('END_CROP_SECONDS'),
+                                              help="Seconds to crop from the end of each signal"),
              resample_rate_hz: float = typer.Option(get_env_variable('RESAMPLE_RATE_HZ'), help="Resample rate in Hz"),
-             segment_size_seconds: float = typer.Option(get_env_variable('SEGMENT_SIZE_SECONDS'),
-                                                        help="Segment size in seconds"),
-             overlap_seconds: float = typer.Option(get_env_variable('OVERLAP_SECONDS'),
-                                                   help="Overlap between segments in seconds"),
+             segment_size_s: float = typer.Option(get_env_variable('SEGMENT_SIZE_SECONDS'),
+                                                  help="Segment size in seconds"),
+             overlap_s: float = typer.Option(get_env_variable('OVERLAP_SECONDS'),
+                                             help="Overlap between segments in seconds"),
 
              moving_window_size_s: float = typer.Option(None, help="Moving window size in seconds"),
              fft: bool = typer.Option(False, help="Calculate FFT features"),
@@ -288,7 +301,11 @@ def pipeline(crop_start_seconds: float = typer.Option(get_env_variable('START_CR
              scaler_type: str = typer.Option('standard', help="Type of scaler to scale numerical features"),
              pca_components: int = typer.Option(None, help="Number of PCA components to use"),
 
-             use_cache: bool = typer.Option(False, help="Use cached data if available to avoid querying InfluxDB"),
+             measurement_file_path: str = typer.Option(None,
+                                                       help="Path to a single measurement file to process. If "
+                                                            "provided, this will override the DB query."),
+             use_db_cache: bool = typer.Option(False,
+                                               help="Use cached DB data if available to avoid querying InfluxDB"),
              output_dir: str = typer.Option('./data/partitions',
                                             help="Output directory to save the processed data as parquet partitions"),
              clear_output: bool = typer.Option(True,
@@ -300,11 +317,11 @@ def pipeline(crop_start_seconds: float = typer.Option(get_env_variable('START_CR
 
     logger.info("Configuration Parameters:")
     logger.info("=== Timing and Sampling ===")
-    logger.info(f"Crop Start [s]: {crop_start_seconds}")
-    logger.info(f"Crop End [s]: {crop_end_seconds}")
+    logger.info(f"Crop Start [s]: {crop_start_s}")
+    logger.info(f"Crop End [s]: {crop_end_s}")
     logger.info(f"Resample Rate [Hz]: {resample_rate_hz}")
-    logger.info(f"Segment Size [s]: {segment_size_seconds}")
-    logger.info(f"Overlap [s]: {overlap_seconds}\n")
+    logger.info(f"Segment Size [s]: {segment_size_s}")
+    logger.info(f"Overlap [s]: {overlap_s}\n")
 
     logger.info("=== Feature Extraction Settings ===")
     logger.info(f"Extract FFT Features: {'Yes' if fft else 'No'}")
@@ -320,7 +337,10 @@ def pipeline(crop_start_seconds: float = typer.Option(get_env_variable('START_CR
     logger.info(f"PCA Components: {pca_components if pca_components else 'None'}\n")
 
     logger.info("=== System Configuration ===")
-    logger.info(f"Use Cache: {'Enabled' if use_cache else 'Disabled'}")
+    if measurement_file_path:
+        logger.info(f"Measurement File Path: {measurement_file_path}")
+    else:
+        logger.info(f"Use DB Cache: {'Enabled' if use_db_cache else 'Disabled'}")
     logger.info(f"Clear Output: {'Yes' if clear_output else 'No'}")
     logger.info(f"Output Path: {output_dir}")
     logger.info(f"Multi-processing: {'Enabled' if multi_processing else 'Disabled'}")
@@ -335,16 +355,20 @@ def pipeline(crop_start_seconds: float = typer.Option(get_env_variable('START_CR
     if not multi_processing:
         logger.warning("Using single-threaded processing. This may take a while for more features.")
 
-    logger.info("Querying data...")
-    df = query_raw_data(use_cache)
+    if measurement_file_path:
+        logger.info("Loading single measurement file...")
+        df = load_single_file_data(measurement_file_path)
+    else:
+        logger.info("Querying data...")
+        df = query_raw_data(use_db_cache)
 
     logger.info("Preprocessing data...")
     segments_df = prepare_time_series_segments(df,
-                                               crop_start_seconds,
-                                               crop_end_seconds,
+                                               crop_start_s,
+                                               crop_end_s,
                                                resample_rate_hz,
-                                               segment_size_seconds,
-                                               overlap_seconds)
+                                               segment_size_s,
+                                               overlap_s)
 
     logger.info("Extracting features...")
     segments_df = extract_features(segments_df,
@@ -353,6 +377,10 @@ def pipeline(crop_start_seconds: float = typer.Option(get_env_variable('START_CR
                                    moving_window_size_s,
                                    fft,
                                    pearson_corr)
+
+    if measurement_file_path:
+        logger.info("Done.")
+        return segments_df
 
     if clear_output and os.path.exists(output_dir):
         logger.info(f"Clearing output directory: {output_dir}")
