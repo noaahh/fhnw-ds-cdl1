@@ -2,7 +2,7 @@ import os
 
 import numpy as np
 import pandas as pd
-import pytorch_lightning as pl
+import lightning as pl
 import torch
 from torch.utils.data import Dataset, DataLoader
 
@@ -100,13 +100,14 @@ class SensorDatasetTorch(Dataset):
 
     def __getitem__(self, idx):
         segment = self.segments[idx]
-        data_tensors = self._process_segment(segment)
+        numpy_array = segment.drop(columns='label').values.astype(np.float32)
+        data_tensor = torch.from_numpy(numpy_array)
         label_one_hot = ONE_HOT_VECTORS[self.labels[idx]]
 
         if self.transform:
-            data_tensors = {k: self.transform(v) for k, v in data_tensors.items()}
+            data_tensor = self.transform(data_tensor)
 
-        return data_tensors, label_one_hot
+        return data_tensor, label_one_hot
 
     def _process_segment(self, segment):
         data_tensors = {col: torch.tensor([segment[col].iloc[0]], dtype=torch.float32)
@@ -116,12 +117,13 @@ class SensorDatasetTorch(Dataset):
         return data_tensors
 
 
-def create_data_loader(data_df, batch_size, shuffle=True, num_workers=0, pin_memory=False):
+def create_data_loader(data_df, batch_size, shuffle=True, num_workers=-1, pin_memory=False, persistent_workers=True):
     return DataLoader(SensorDatasetTorch(data_df),
                       batch_size=batch_size,
                       shuffle=shuffle,
                       num_workers=num_workers,
-                      pin_memory=pin_memory)
+                      pin_memory=pin_memory,
+                      persistent_workers=persistent_workers)
 
 
 class SensorDataModule(pl.LightningDataModule):
@@ -134,8 +136,22 @@ class SensorDataModule(pl.LightningDataModule):
         self.num_workers = os.cpu_count() if num_workers is None else num_workers
         self.pin_memory = pin_memory
 
+    @property
+    def num_classes(self):
+        return NUM_CLASSES
+
     def setup(self, stage=None):
-        self.data_dict = get_partitioned_data(self.partition_paths)
+        partitioned_data_list = get_partitioned_data(self.partition_paths)
+        # create data_loaders which create dataloader for all folds in list of partitioned data is a list
+        if isinstance(partitioned_data_list, list):
+            self.data_dict = {idx: {
+                "train": create_data_loader(partition['train'], self.batch_size, num_workers=self.num_workers, pin_memory=self.pin_memory),
+                "validate": create_data_loader(partition['validate'], self.batch_size, shuffle=False, num_workers=self.num_workers, pin_memory=self.pin_memory)
+            } for idx, partition in enumerate(partitioned_data_list)}
+
+        elif isinstance(partitioned_data_list, dict):
+            self.data_dict = {0: partitioned_data_list}
+
 
     def train_dataloader(self):
         return create_data_loader(self.data_dict['train'],
@@ -144,7 +160,7 @@ class SensorDataModule(pl.LightningDataModule):
                                   pin_memory=self.pin_memory)
 
     def val_dataloader(self):
-        return create_data_loader(self.data_dict['val'],
+        return create_data_loader(self.data_dict['validate'],
                                   self.batch_size,
                                   num_workers=self.num_workers,
                                   pin_memory=self.pin_memory)
