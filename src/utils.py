@@ -20,10 +20,9 @@ def get_env_variable(variable_name):
 
 PARTITION_PATHS_KEYS = ['train', 'validate']
 PARTITIONS_DIR = os.path.join(get_env_variable("DATA_DIR"), "partitions")
-K_FOLDS = get_env_variable("K_FOLDS")
 
 
-def get_partition_paths(root_output_dir=PARTITIONS_DIR, k_folds=K_FOLDS):
+def get_partition_paths(root_output_dir=PARTITIONS_DIR, k_folds=None):
     partition_paths = []
 
     if k_folds is not None:
@@ -36,7 +35,7 @@ def get_partition_paths(root_output_dir=PARTITIONS_DIR, k_folds=K_FOLDS):
             })
     else:
         partition_paths = {
-            'train': os.path.join(root_output_dir, 'X_train.parquet'),
+            'train': os.path.join(root_output_dir, 'train.parquet'),
             'validate': os.path.join(root_output_dir, 'val.parquet')
         }
 

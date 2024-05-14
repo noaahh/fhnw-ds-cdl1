@@ -22,3 +22,4 @@ lightning~=2.2.4
 torchmetrics~=1.4.0
 rootutils~=1.0.7
 omegaconf~=2.3.0
+wandb~=0.17.0

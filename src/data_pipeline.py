@@ -201,14 +201,14 @@ def extract_features(df: pd.DataFrame, multi_processing: bool, n_jobs: int,
     return df
 
 
-def split_data(df: pd.DataFrame, val_size: float, n_splits: int = None) -> tuple | list:
+def split_data(df: pd.DataFrame, val_size: float, k_folds: int = None) -> tuple | list:
     """Split data into train and validation sets or perform K-fold split."""
     grouped = df.groupby('segment_id').first().reset_index()
     assert grouped['segment_id'].nunique() == len(grouped), "Duplicate segment IDs found in the dataset."
 
-    if n_splits:
+    if k_folds:
         folds = []
-        kf = KFold(n_splits=n_splits, shuffle=True, random_state=1337)
+        kf = KFold(n_splits=k_folds, shuffle=True, random_state=1337)
         for train_idx, val_idx in kf.split(grouped):
             train_ids = grouped.loc[train_idx, 'segment_id']
             val_ids = grouped.loc[val_idx, 'segment_id']
@@ -287,7 +287,8 @@ def pipeline(crop_start_s: float = typer.Option(get_env_variable('START_CROP_SEC
                                                 help="Seconds to crop from the start of each signal"),
              crop_end_s: float = typer.Option(get_env_variable('END_CROP_SECONDS'),
                                               help="Seconds to crop from the end of each signal"),
-             resample_rate_hz: float = typer.Option(get_env_variable('RESAMPLE_RATE_HZ'), help="Resample rate in Hz"),
+             resample_rate_hz: float = typer.Option(get_env_variable('RESAMPLE_RATE_HZ'),
+                                                    help="Resample rate in Hz"),
              segment_size_s: float = typer.Option(get_env_variable('SEGMENT_SIZE_SECONDS'),
                                                   help="Segment size in seconds"),
              overlap_s: float = typer.Option(get_env_variable('OVERLAP_SECONDS'),
@@ -298,7 +299,7 @@ def pipeline(crop_start_s: float = typer.Option(get_env_variable('START_CROP_SEC
              pearson_corr: bool = typer.Option(False, help="Calculate Pearson correlation features"),
 
              validation_size: float = typer.Option(0.2, help="Validation set size in proportion to the data set"),
-             n_splits: int = typer.Option(None, help="Number of splits for cross-validation"),
+             k_folds: int = typer.Option(None, help="Number of splits for cross-validation"),
              scaler_type: str = typer.Option('standard', help="Type of scaler to scale numerical features"),
              pca_components: int = typer.Option(None, help="Number of PCA components to use"),
 
@@ -331,7 +332,7 @@ def pipeline(crop_start_s: float = typer.Option(get_env_variable('START_CROP_SEC
 
     logger.info("=== Model Validation and Data Splitting ===")
     logger.info(f"Validation Set Size: {validation_size}")
-    logger.info(f"Number of Data Splits: {n_splits if n_splits else 'No Cross-Validation'}\n")
+    logger.info(f"Number of Folds for CV: {k_folds if k_folds else 'No Cross-Validation'}\n")
 
     logger.info("=== Data Processing Options ===")
     logger.info(f"Scaler Type: {scaler_type}")
@@ -389,9 +390,9 @@ def pipeline(crop_start_s: float = typer.Option(get_env_variable('START_CROP_SEC
         os.makedirs(output_dir, exist_ok=True)
 
     logger.info("Splitting and processing data...")
-    if n_splits:
-        paths = get_partition_paths(k_folds=n_splits)
-        folds = split_data(segments_df, validation_size, n_splits)
+    if k_folds:
+        paths = get_partition_paths(k_folds=k_folds)
+        folds = split_data(segments_df, validation_size, k_folds)
 
         for i, (train_data, val_data) in enumerate(folds):
             train_data, val_data = scale_and_transform_data(train_data, val_data, scaler_type, pca_components)
@@ -400,7 +401,7 @@ def pipeline(crop_start_s: float = typer.Option(get_env_variable('START_CROP_SEC
         train_data, val_data = split_data(segments_df, validation_size)
         train_data, val_data = scale_and_transform_data(train_data, val_data, scaler_type, pca_components)
 
-        paths = get_partition_paths(k_folds=n_splits)
+        paths = get_partition_paths(k_folds=k_folds)
         save_partitions(train_data, val_data, paths)
 
     logger.info("Data preparation completed.")

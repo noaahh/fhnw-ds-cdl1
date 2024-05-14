@@ -1,5 +1,7 @@
 defaults:
   - _self_
   - model: log_reg
+  - data: sensor
 
+ckpt_path: null
 seed: 1337

@@ -2,3 +2,5 @@ batch_size: 128
 
 # num_workers: None # None means using the number of CPU cores
 pin_memory: True
+
+k_folds: null

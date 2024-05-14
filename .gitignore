@@ -11,3 +11,5 @@ cache/
 lightning_logs/
 
 outputs/
+
+wandb/
