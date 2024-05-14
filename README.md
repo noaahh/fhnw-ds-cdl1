@@ -94,5 +94,5 @@ This script offers a wide range of configurable parameters, allowing fine-tuning
 Run the script with the `--help` flag to see all available options.
 
 ```bash
-python data_pipeline.py --help
+python src/data_pipeline.py --help
 ```
