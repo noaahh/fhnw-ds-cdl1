@@ -1,11 +1,15 @@
+import hydra
 import numpy as np
+import rootutils
+from omegaconf import DictConfig, OmegaConf
 from sklearn.base import BaseEstimator
-from sklearn.linear_model import LogisticRegression
 from sklearn.metrics import accuracy_score, f1_score
 from tqdm import tqdm
 
+rootutils.setup_root(__file__, indicator=".project-root", pythonpath=True)
+
 from src.data.dataset import SensorDatasetSKLearn
-from src.data.partition_helper import get_partitioned_data, get_partition_paths
+from src.utils import get_partition_paths, get_partitioned_data
 
 
 def train_and_evaluate_model(data_partitions, model: BaseEstimator, metrics: dict):
@@ -32,12 +36,24 @@ def train_and_evaluate_model(data_partitions, model: BaseEstimator, metrics: dic
     print(avg_results)
 
 
-data = get_partitioned_data(get_partition_paths("./data/partitions", k_folds=5))
+@hydra.main(version_base="1.3", config_path="../configs", config_name="sklearn_train.yaml")
+def main(cfg: DictConfig) -> None:
+    print(OmegaConf.to_yaml(cfg))
 
-model = LogisticRegression(random_state=1337, max_iter=1000)
-metrics = {
-    'accuracy': accuracy_score,
-    'f1': lambda y, pred: f1_score(y, pred, average='macro')
-}
+    if cfg.get("seed"):
+        np.random.seed(cfg.seed)
 
-train_and_evaluate_model(data, model, metrics)
+    data = get_partitioned_data(get_partition_paths())
+
+    model = hydra.utils.instantiate(cfg.model)
+
+    metrics = {
+        'accuracy': accuracy_score,
+        'f1': lambda y, pred: f1_score(y, pred, average='macro')
+    }
+
+    train_and_evaluate_model(data, model, metrics)
+
+
+if __name__ == "__main__":
+    main()

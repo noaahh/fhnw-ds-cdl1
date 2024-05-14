@@ -4,6 +4,7 @@ import os
 import shutil
 
 import pandas as pd
+import rootutils
 import typer
 from dotenv import load_dotenv
 from joblib import Parallel, delayed
@@ -12,13 +13,16 @@ from sklearn.model_selection import train_test_split, KFold
 from sklearn.preprocessing import StandardScaler, MinMaxScaler, RobustScaler
 from tqdm import tqdm
 
+rootutils.setup_root(__file__, indicator=".project-root", pythonpath=True)
+
 from src.data.db import InfluxDBWrapper
 from src.data.measurement_file import MeasurementFile
-from src.data.partition_helper import get_partition_paths
 from src.extraction.fft import extract_fft_features
 from src.extraction.moving_average import calculate_moving_average, calc_window_size
-from src.helper import get_env_variable
 from src.processing.time_series import crop_signal, resample_signal, create_segments
+from src.utils import get_env_variable, get_partition_paths
+
+load_dotenv()
 
 app = typer.Typer()
 logging.basicConfig(level=logging.DEBUG, format='%(asctime)s - %(levelname)s - %(message)s')
@@ -30,9 +34,6 @@ def setup_logging(verbose: bool):
     level = logging.DEBUG if verbose else logging.INFO
     logger.setLevel(level)
     logger.disabled = not verbose
-
-
-load_dotenv()
 
 
 def load_single_file_data(zip_file_path):
@@ -49,7 +50,7 @@ def load_single_file_data(zip_file_path):
 
 def query_raw_data(use_cache: bool) -> pd.DataFrame:
     """Query raw data from InfluxDB and cache it if necessary."""
-    cache_dir = 'cache'
+    cache_dir = os.path.join(get_env_variable("DATA_DIR"), "cache")
     cache_path = os.path.join(cache_dir, 'raw_data_db_cache.parquet')
     if use_cache:
         try:
@@ -306,14 +307,14 @@ def pipeline(crop_start_s: float = typer.Option(get_env_variable('START_CROP_SEC
                                                             "provided, this will override the DB query."),
              use_db_cache: bool = typer.Option(False,
                                                help="Use cached DB data if available to avoid querying InfluxDB"),
-             output_dir: str = typer.Option('./data/partitions',
-                                            help="Output directory to save the processed data as parquet partitions"),
              clear_output: bool = typer.Option(True,
                                                help="Clear the output directory before saving new splits/folds data"),
              multi_processing: bool = typer.Option(False, help="Enable multi-processing"),
              n_jobs: int = typer.Option(-1, help="Number of jobs to run in parallel for multi-processing"),
              verbose: bool = typer.Option(False, help="Enable verbose logging")):
     setup_logging(verbose)
+
+    output_dir = os.path.join(get_env_variable('DATA_DIR'), 'partitions')
 
     logger.info("Configuration Parameters:")
     logger.info("=== Timing and Sampling ===")
@@ -389,7 +390,7 @@ def pipeline(crop_start_s: float = typer.Option(get_env_variable('START_CROP_SEC
 
     logger.info("Splitting and processing data...")
     if n_splits:
-        paths = get_partition_paths(output_dir, n_splits)
+        paths = get_partition_paths(k_folds=n_splits)
         folds = split_data(segments_df, validation_size, n_splits)
 
         for i, (train_data, val_data) in enumerate(folds):
@@ -399,7 +400,7 @@ def pipeline(crop_start_s: float = typer.Option(get_env_variable('START_CROP_SEC
         train_data, val_data = split_data(segments_df, validation_size)
         train_data, val_data = scale_and_transform_data(train_data, val_data, scaler_type, pca_components)
 
-        paths = get_partition_paths(output_dir)
+        paths = get_partition_paths(k_folds=n_splits)
         save_partitions(train_data, val_data, paths)
 
     logger.info("Data preparation completed.")

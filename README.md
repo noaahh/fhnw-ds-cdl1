@@ -47,10 +47,10 @@ The `import.py` script is designed for the initial data handling phase. It impor
 directory and can be configured to run either once or periodically based on the settings provided. This script supports
 multi-threading to speed up the data import process, especially useful when dealing with large datasets.
 
-To run the script with the default options and import data from the "data" folder:
+To run the script with the default options and import data from the `DATA_DIR` directory specified in the `.env` file:
 
 ```bash
-python import.py --raw-data-dir "data/raw"
+python src/import.py
 ```
 
 **Parameters**:
@@ -65,7 +65,7 @@ You can customize the import process using several options:
 Run the script with the `--help` flag to see all available options.
 
 ```bash
-python import.py --help
+python src/import.py --help
 ```
 
 #### data_pipeline.py
@@ -80,7 +80,7 @@ ways.
 To execute the script using default settings defined by environment variables:
 
 ```bash
-python data_pipeline.py --output-dir "data/partitions"
+python src/data_pipeline.py
 ```
 
 **Parameters**:

@@ -1,4 +1,4 @@
-from src.helper import get_env_variable
+from src.utils import get_env_variable
 
 
 def calc_window_size(window_size_seconds, sampling_rate_hz=get_env_variable('RESAMPLE_RATE_HZ')):

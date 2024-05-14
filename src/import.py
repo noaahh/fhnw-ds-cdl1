@@ -5,15 +5,18 @@ import os
 import time
 
 import pandas as pd
+import rootutils
 import typer
 from dotenv import load_dotenv
 from influxdb_client import Point, WritePrecision
 from joblib import Parallel, delayed
 from tqdm import tqdm
 
+rootutils.setup_root(__file__, indicator=".project-root", pythonpath=True)
+
 from src.data.db import InfluxDBWrapper
 from src.data.measurement_file import MeasurementFile
-from src.helper import get_env_variable
+from src.utils import get_env_variable
 
 app = typer.Typer()
 
@@ -137,8 +140,7 @@ def write_data_to_db(measurement_file, merged_data):
 
 
 @app.command()
-def import_data(raw_data_dir: str = typer.Option("./data/raw", help="Path to the folder containing the data files"),
-                run_periodically: bool = typer.Option(False, help="Enable periodic running of the import"),
+def import_data(run_periodically: bool = typer.Option(False, help="Enable periodic running of the import"),
                 interval: int = typer.Option(60, help="Interval between runs in seconds"),
                 multi_threading: bool = typer.Option(True, help="Enable multi-threading"),
                 n_jobs: int = typer.Option(-1, help="Number of jobs to run in parallel"),
@@ -147,6 +149,8 @@ def import_data(raw_data_dir: str = typer.Option("./data/raw", help="Path to the
     global VERBOSE
     VERBOSE = verbose
     setup_logging(verbose)
+
+    raw_data_dir = os.path.join(get_env_variable("DATA_DIR"), "raw")
 
     logger.info("--- PARAMETERS ---")
     logger.info(f"INFLUXDB_URL: {get_env_variable('INFLUXDB_URL')}")

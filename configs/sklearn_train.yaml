@@ -1,0 +1,5 @@
+defaults:
+  - _self_
+  - model: log_reg
+
+seed: 1337

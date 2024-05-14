@@ -1,7 +1,7 @@
 import numpy as np
 from scipy.signal import welch
 
-from src.helper import get_env_variable
+from src.utils import get_env_variable
 
 
 def dominant_frequency(signal, sampling_rate):

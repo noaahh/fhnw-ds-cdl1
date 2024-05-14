@@ -6,7 +6,7 @@ from pathlib import Path
 import pandas as pd
 
 from src.data.label_mapping import MeasurementGroup, extract_label_from_file_name
-from src.helper import get_env_variable
+from src.utils import get_env_variable
 
 FILE_SENSOR_COLUMN_MAPPINGS = {
     'accelerometer': ['time', 'z', 'y', 'x'],

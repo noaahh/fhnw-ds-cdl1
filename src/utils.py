@@ -1,11 +1,29 @@
+import logging
 import os
 
 import pandas as pd
+from dotenv import load_dotenv
+
+load_dotenv()
+
+
+def get_env_variable(variable_name):
+    value = os.getenv(variable_name)
+    if value is None:
+        raise ValueError(f"Environment variable {variable_name} must be set")
+
+    if value.isdigit():
+        return int(value)
+
+    return value
+
 
 PARTITION_PATHS_KEYS = ['train', 'validate']
+PARTITIONS_DIR = os.path.join(get_env_variable("DATA_DIR"), "partitions")
+K_FOLDS = get_env_variable("K_FOLDS")
 
 
-def get_partition_paths(root_output_dir, k_folds=None):
+def get_partition_paths(root_output_dir=PARTITIONS_DIR, k_folds=K_FOLDS):
     partition_paths = []
 
     if k_folds is not None:
@@ -37,3 +55,14 @@ def get_partitioned_data(partition_paths):
         return folds
     else:
         raise ValueError("Invalid partition paths format.")
+
+
+def setup_logging():
+    logging.basicConfig(
+        level=logging.INFO,
+        format="%(asctime)s [%(levelname)s] %(message)s",
+        handlers=[
+            logging.StreamHandler()
+        ]
+    )
+    return logging.getLogger(__name__)

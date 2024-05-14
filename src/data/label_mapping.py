@@ -1,4 +1,3 @@
-# This file defines the label mappings from the naming schema present in the file names to the actual labels.
 from enum import Enum
 
 
