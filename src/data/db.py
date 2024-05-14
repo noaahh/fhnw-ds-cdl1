@@ -57,6 +57,8 @@ class InfluxDBWrapper:
     def __exit__(self, exc_type, exc_val, exc_tb):
         self.client.close()
         self.client = None
+        self.write_api = None
+        self.query_api = None
 
     def _check_connection(self):
         with self._create_client() as client:

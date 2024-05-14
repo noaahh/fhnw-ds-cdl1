@@ -1,0 +1,10 @@
+defaults:
+  - _self_
+  - model: deep_res_bidir_lstm
+  #- callbacks: default
+  - data: sensor
+  - logger: null # TODO: set wandb
+  - trainer: default
+
+ckpt_path: null
+seed: null

@@ -1,0 +1,12 @@
+_target_: src.models.simple_lstm.SimpleLSTM
+input_dim: 16
+hidden_dim: 128
+output_dim: 5
+num_layers: 2
+dropout: 0.3
+
+optimizer:
+  _target_: torch.optim.Adam
+  _partial_: true
+  lr: 0.001
+  weight_decay: 0.0

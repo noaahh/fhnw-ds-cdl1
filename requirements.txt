@@ -1,9 +1,9 @@
 certifi==2024.2.2
 influxdb-client==1.41.0
-numpy==1.26.4
-pandas==2.2.1
+numpy~=1.26.4
+pandas~=2.2.1
 python-dateutil==2.9.0.post0
-python-dotenv==1.0.1
+python-dotenv~=1.0.1
 pytz==2024.1
 reactivex==4.0.4
 six==1.16.0
@@ -18,3 +18,7 @@ joblib~=1.4.0
 scipy~=1.13.0
 torch~=2.3.0
 scikit-learn~=1.4.2
+lightning~=2.2.4
+torchmetrics~=1.4.0
+rootutils~=1.0.7
+omegaconf~=2.3.0
