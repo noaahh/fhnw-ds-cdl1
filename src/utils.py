@@ -3,6 +3,7 @@ import os
 
 import pandas as pd
 from dotenv import load_dotenv
+import typer
 
 load_dotenv()
 
@@ -65,3 +66,13 @@ def setup_logging():
         ]
     )
     return logging.getLogger(__name__)
+
+
+def validate_smoothing(value: str):
+    if value.lower() not in ('butterworth', 'wavelet', 'true', 'false'):
+        raise typer.BadParameter("Smoothing must be either 'butterworth', 'wavelet', 'true', or 'false'")
+    if value.lower() == 'true':
+        return True
+    if value.lower() == 'false':
+        return False
+    return value.lower()

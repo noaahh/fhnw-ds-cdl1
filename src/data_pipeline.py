@@ -19,8 +19,9 @@ from src.data.db import InfluxDBWrapper
 from src.data.measurement_file import MeasurementFile
 from src.extraction.fft import extract_fft_features
 from src.extraction.moving_average import calculate_moving_average, calc_window_size
+from src.extraction.denoising import apply_wavelet_denoising, apply_butterworth_filter
 from src.processing.time_series import crop_signal, resample_signal, create_segments
-from src.utils import get_env_variable, get_partition_paths
+from src.utils import get_env_variable, get_partition_paths, validate_smoothing
 
 load_dotenv()
 
@@ -159,7 +160,7 @@ def prepare_time_series_segments(data: pd.DataFrame,
     return segments_df
 
 
-def extract_segment_features(df, segment_id, columns, moving_window_size, use_fft, use_pears_corr):
+def extract_segment_features(df, segment_id, columns, moving_window_size, use_fft, use_pears_corr, smoothing):
     """Extract features for a specific segment with optimized pandas operations."""
     segment = df[df['segment_id'] == segment_id]
     segment_features = {}
@@ -173,6 +174,11 @@ def extract_segment_features(df, segment_id, columns, moving_window_size, use_ff
                 for k, v in fft_features.items()
             })
 
+        if smoothing in ('butterworth', True):
+            segment_features[f'{column}_butterworth_smoothed'] = apply_butterworth_filter(segment[column], order=4, cutoff=0.1)
+        if smoothing == 'wavelet':
+            segment_features[f'{column}_wavelet_smoothed'] = apply_wavelet_denoising(segment[column], wavelet='db4', level=1)
+        
         # Moving average
         if moving_window_size:
             segment_features[f'{column}_moving_avg'] = calculate_moving_average(segment, column, moving_window_size)
@@ -188,7 +194,8 @@ def extract_segment_features(df, segment_id, columns, moving_window_size, use_ff
 
 
 def extract_features(df: pd.DataFrame, multi_processing: bool, n_jobs: int,
-                     moving_window_size_s: float, use_fft: bool, use_pears_corr: bool) -> pd.DataFrame:
+                     moving_window_size_s: float, use_fft: bool, use_pears_corr: bool,
+                     smoothing: str) -> pd.DataFrame:
     """Extract features from DataFrame using optimized parallel processing."""
     float_columns = df.select_dtypes(include=['float64']).columns
     moving_window_size = calc_window_size(moving_window_size_s) if moving_window_size_s else None
@@ -198,7 +205,7 @@ def extract_features(df: pd.DataFrame, multi_processing: bool, n_jobs: int,
 
     if multi_processing:
         results = Parallel(n_jobs=n_jobs)(delayed(extract_segment_features)(
-            df, segment_id, float_columns, moving_window_size, use_fft, use_pears_corr)
+            df, segment_id, float_columns, moving_window_size, use_fft, use_pears_corr, smoothing)
                                           for segment_id in tqdm(segment_ids, desc="Extracting features"))
     else:
         results = [
@@ -307,6 +314,7 @@ def pipeline(crop_start_s: float = typer.Option(get_env_variable('START_CROP_SEC
              moving_window_size_s: float = typer.Option(None, help="Moving window size in seconds"),
              fft: bool = typer.Option(False, help="Calculate FFT features"),
              pearson_corr: bool = typer.Option(False, help="Calculate Pearson correlation features"),
+             smoothing: str = typer.Option("false", callback=validate_smoothing, help="Smoothing method: 'butterworth', 'wavelet', 'true', or 'false'"),
 
              validation_size: float = typer.Option(0.2, help="Validation set size in proportion to the data set"),
              k_folds: int = typer.Option(None, help="Number of splits for cross-validation"),
@@ -388,7 +396,8 @@ def pipeline(crop_start_s: float = typer.Option(get_env_variable('START_CROP_SEC
                                    n_jobs,
                                    moving_window_size_s,
                                    fft,
-                                   pearson_corr)
+                                   pearson_corr,
+                                   smoothing)
 
     if measurement_file_path:
         logger.info("Done.")
