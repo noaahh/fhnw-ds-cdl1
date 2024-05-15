@@ -6,7 +6,6 @@ from lightning.pytorch.loggers import WandbLogger
 
 rootutils.setup_root(__file__, indicator=".project-root", pythonpath=True)
 
-from src.data.sensor_datamodule import SensorDataModule
 from src.utils import get_env_variable, setup_logging
 
 from omegaconf import OmegaConf
@@ -78,9 +77,7 @@ def train(cfg):
     if k_folds is not None:
         raise NotImplementedError("K-Fold training is not yet supported")
 
-    datamodule = SensorDataModule(batch_size=cfg.data.batch_size,
-                                  num_workers=cfg.data.get("num_workers", None),
-                                  pin_memory=cfg.data.get("pin_memory", True))
+    datamodule = hydra.utils.instantiate(cfg.data)
     datamodule.setup(stage='fit')
 
     model = hydra.utils.instantiate(cfg.model)

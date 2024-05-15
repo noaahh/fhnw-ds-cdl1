@@ -1,6 +1,8 @@
+_target_: src.data.sensor_datamodule.SensorDataModule
+
 batch_size: 128
 
-# num_workers: None # None means using the number of CPU cores
+num_workers: null # null means using the number of CPU cores
 pin_memory: True
 
 k_folds: null
