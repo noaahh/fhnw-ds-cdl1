@@ -99,7 +99,7 @@ def import_file(measurement_file):
 def is_file_imported(file_hash):
     """Checks if a file has been imported by querying InfluxDB."""
     query = (f'from(bucket: "{os.getenv("INFLUXDB_INIT_BUCKET")}") '
-             f'|> range(start: -900d) '
+             f'|> range(start: 0, stop: now()) '
              f'|> filter(fn: (r) => '
              f'r.file_hash == "{file_hash}") |> limit(n: 1)')
     with InfluxDBWrapper() as influx:

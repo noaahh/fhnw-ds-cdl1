@@ -65,7 +65,7 @@ def query_raw_data(use_cache: bool) -> pd.DataFrame:
         query_api = client.query_api
         query = f'''
             from(bucket: "{influxdb_bucket}")
-              |> range(start: -1y)
+              |> range(start: 0, stop: now())
               |> filter(fn: (r) => r._measurement == "measurement")
               |> pivot(rowKey:["_time"], columnKey: ["_field"], valueColumn: "_value")
         '''
@@ -74,6 +74,11 @@ def query_raw_data(use_cache: bool) -> pd.DataFrame:
 
     os.makedirs(cache_dir, exist_ok=True)
     df.to_parquet(cache_path)
+
+    logger.debug(f"Data shape: {df.shape}"
+                 f"\nColumns: {df.columns}"
+                 f"\nUnique Labels: {df['label'].unique()}"
+                 f"\nUnique File Hashes: {df['file_hash'].nunique()}")
     return df
 
 
@@ -99,7 +104,12 @@ def prepare_time_series_segments(data: pd.DataFrame,
     skipped_files = 0
     for file_hash, file_data in tqdm(data.groupby('file_hash'), desc="Processing Files", unit="file"):
         if file_data.isnull().values.any() or file_data.isna().values.any():
-            logger.warning(f"File {file_hash} contains NaN values. Skipping file.")
+            columns_with_nan = file_data.columns[file_data.isnull().any()].tolist()
+            nan_percentage_per_column = file_data[columns_with_nan].isnull().mean() * 100
+
+            logger.warning(
+                f"File {file_hash} contains NaN values: {nan_percentage_per_column}")
+            logger.warning(f"Skipping file {file_hash}.")
             skipped_files += 1
             continue
 

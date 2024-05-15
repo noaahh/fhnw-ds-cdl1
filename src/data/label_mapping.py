@@ -20,6 +20,9 @@ MAPPING = {
     "_laufen": Labels.WALKING,
     "treppe": Labels.CLIMBING,
     "stehen": Labels.STANDING,
+    "rennen": Labels.RUNNING,
+    "sitzen": Labels.SITTING,
+    "treppenlaufen": Labels.CLIMBING,
 
     "walking": Labels.WALKING,
     "sitting": Labels.SITTING,
