@@ -28,7 +28,8 @@ MAPPING = {
     "sitting": Labels.SITTING,
     "standing": Labels.STANDING,
     "running": Labels.RUNNING,
-    "climbing": Labels.CLIMBING
+    "climbing": Labels.CLIMBING,
+    "jogging": Labels.RUNNING
 }
 
 
