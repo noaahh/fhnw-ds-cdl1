@@ -1,5 +1,6 @@
 #!/usr/bin/env python3
 import logging
+import math
 import os
 import shutil
 
@@ -9,7 +10,7 @@ import typer
 from dotenv import load_dotenv
 from joblib import Parallel, delayed
 from sklearn.decomposition import PCA
-from sklearn.model_selection import train_test_split, KFold
+from sklearn.model_selection import train_test_split, StratifiedKFold, KFold
 from sklearn.preprocessing import StandardScaler, MinMaxScaler, RobustScaler
 from tqdm import tqdm
 
@@ -83,6 +84,27 @@ def query_raw_data(use_cache: bool) -> pd.DataFrame:
     return df
 
 
+def get_session_lengths(df: pd.DataFrame, resample_rate_hz: float) -> pd.DataFrame:
+    return (df.groupby("session_id")
+            .agg({"session_id": "count"})
+            .rename(columns={"session_id": "count"}) / resample_rate_hz)
+
+
+def truncate_sessions(segments_df: pd.DataFrame, segment_size_seconds: float,
+                      max_session_length_seconds: float) -> pd.DataFrame:
+    """Truncate sessions to a maximum length."""
+    assert 'session_id' in segments_df.columns, "Session ID column not found in the DataFrame."
+    assert 'segment_id' in segments_df.columns, "Segment ID column not found in the DataFrame."
+
+    max_count_segments = math.floor(max_session_length_seconds / segment_size_seconds)
+    return segments_df.groupby('session_id').apply(
+        lambda x: x[x['segment_id'].isin(
+            x['segment_id'].drop_duplicates().sample(
+                n=min(x['segment_id'].drop_duplicates().shape[0], max_count_segments))
+        )]
+    ).reset_index(drop=True)
+
+
 def prepare_time_series_segments(data: pd.DataFrame,
                                  start_crop_seconds: float,
                                  end_crop_seconds: float,
@@ -109,7 +131,7 @@ def prepare_time_series_segments(data: pd.DataFrame,
             nan_percentage_per_column = file_data[columns_with_nan].isnull().mean() * 100
 
             logger.warning(
-                f"File {file_hash} contains NaN values: {nan_percentage_per_column}")
+                f"File {file_hash} contains NaN values: ({', '.join([f'{k}: {v:.2f}%' for k, v in nan_percentage_per_column.items()])}).")
             logger.warning(f"Skipping file {file_hash}.")
             skipped_files += 1
             continue
@@ -145,6 +167,7 @@ def prepare_time_series_segments(data: pd.DataFrame,
             segment = segment.copy()
             segment.reset_index(inplace=True)  # Reset index to get the time column
             segment.loc[:, 'segment_id'] = file_hash + '_' + str(i)
+            segment.loc[:, 'session_id'] = file_hash
             segment.loc[:, 'label'] = label
             segment_df = pd.concat([segment_df, segment], axis=0, ignore_index=True)
 
@@ -175,10 +198,12 @@ def extract_segment_features(df, segment_id, columns, moving_window_size, use_ff
             })
 
         if smoothing in ('butterworth', True):
-            segment_features[f'{column}_butterworth_smoothed'] = apply_butterworth_filter(segment[column], order=4,
+            segment_features[f'{column}_butterworth_smoothed'] = apply_butterworth_filter(segment[column],
+                                                                                          order=4,
                                                                                           cutoff=0.1)
         if smoothing == 'wavelet':
-            segment_features[f'{column}_wavelet_smoothed'] = apply_wavelet_denoising(segment[column], wavelet='db4',
+            segment_features[f'{column}_wavelet_smoothed'] = apply_wavelet_denoising(segment[column],
+                                                                                     wavelet='db4',
                                                                                      level=1)
 
         # Moving average
@@ -221,26 +246,40 @@ def extract_features(df: pd.DataFrame, multi_processing: bool, n_jobs: int,
     return df
 
 
-def split_data(df: pd.DataFrame, val_size: float, k_folds: int = None) -> tuple | list:
+def split_data(df: pd.DataFrame, split_by: str, val_size: float, stratify: bool, k_folds: int = None) -> tuple | list:
     """Split data into train and validation sets or perform K-fold split."""
-    grouped = df.groupby('segment_id').first().reset_index()
-    assert grouped['segment_id'].nunique() == len(grouped), "Duplicate segment IDs found in the dataset."
+    assert split_by in df.columns, "Split column not found in the DataFrame."
+
+    grouped = df.groupby(split_by).first().reset_index()
+    assert grouped[split_by].nunique() == len(grouped), "Split column contains duplicate values."
 
     if k_folds:
         folds = []
-        kf = KFold(n_splits=k_folds, shuffle=True, random_state=1337)
-        for train_idx, val_idx in kf.split(grouped):
-            train_ids = grouped.loc[train_idx, 'segment_id']
-            val_ids = grouped.loc[val_idx, 'segment_id']
-            train_mask = df['segment_id'].isin(train_ids)
-            val_mask = df['segment_id'].isin(val_ids)
+
+        if stratify:
+            kf = StratifiedKFold(n_splits=k_folds, shuffle=True, random_state=1337)
+            splits = kf.split(grouped, grouped['label'])
+        else:
+            kf = KFold(n_splits=k_folds, shuffle=True, random_state=1337)
+            splits = kf.split(grouped)
+
+        for train_idx, val_idx in splits:
+            train_ids = grouped.loc[train_idx, split_by]
+            val_ids = grouped.loc[val_idx, split_by]
+            train_mask = df[split_by].isin(train_ids)
+            val_mask = df[split_by].isin(val_ids)
             folds.append((df[train_mask], df[val_mask]))
 
         return folds
     else:
-        train_ids, val_ids = train_test_split(grouped['segment_id'], test_size=val_size, stratify=grouped['label'])
-        train_mask = df['segment_id'].isin(train_ids)
-        val_mask = df['segment_id'].isin(val_ids)
+        train_idxs, val_idxs = train_test_split(grouped,
+                                                test_size=val_size,
+                                                stratify=grouped['label'] if stratify else None,
+                                                shuffle=True, random_state=1337)
+        train_ids = train_idxs[split_by]
+        val_ids = val_idxs[split_by]
+        train_mask = df[split_by].isin(train_ids)
+        val_mask = df[split_by].isin(val_ids)
         return df[train_mask], df[val_mask]
 
 
@@ -313,6 +352,8 @@ def pipeline(crop_start_s: float = typer.Option(get_env_variable('START_CROP_SEC
                                                   help="Segment size in seconds"),
              overlap_s: float = typer.Option(get_env_variable('OVERLAP_SECONDS'),
                                              help="Overlap between segments in seconds"),
+             max_session_length_s: float = typer.Option(None,
+                                                        help="Maximum number of seconds taken from each session"),
 
              moving_window_size_s: float = typer.Option(None, help="Moving window size in seconds"),
              fft: bool = typer.Option(False, help="Calculate FFT features"),
@@ -322,6 +363,8 @@ def pipeline(crop_start_s: float = typer.Option(get_env_variable('START_CROP_SEC
 
              validation_size: float = typer.Option(0.2, help="Validation set size in proportion to the data set"),
              k_folds: int = typer.Option(None, help="Number of splits for cross-validation"),
+             stratify: bool = typer.Option(True, help="Stratify data during cross-validation"),
+             split_by: str = typer.Option('session_id', help="Column to split data by"),
              scaler_type: str = typer.Option('standard', help="Type of scaler to scale numerical features"),
              pca_components: int = typer.Option(None, help="Number of PCA components to use"),
 
@@ -354,7 +397,8 @@ def pipeline(crop_start_s: float = typer.Option(get_env_variable('START_CROP_SEC
 
     logger.info("=== Model Validation and Data Splitting ===")
     logger.info(f"Validation Set Size: {validation_size}")
-    logger.info(f"Number of Folds for CV: {k_folds if k_folds else 'No Cross-Validation'}\n")
+    logger.info(f"Number of Folds for CV: {k_folds if k_folds else 'No Cross-Validation'}")
+    logger.info(f"Split Data By: {split_by}\n")
 
     logger.info("=== Data Processing Options ===")
     logger.info(f"Scaler Type: {scaler_type}")
@@ -394,6 +438,16 @@ def pipeline(crop_start_s: float = typer.Option(get_env_variable('START_CROP_SEC
                                                segment_size_s,
                                                overlap_s)
 
+    if max_session_length_s:
+        logger.info(
+            f"Session lengths before truncation: {get_session_lengths(segments_df, resample_rate_hz).describe()}")
+
+        logger.info(f"Truncating sessions to a maximum length of {max_session_length_s} seconds.")
+        segments_df = truncate_sessions(segments_df, segment_size_s, max_session_length_s)
+
+        logger.info(
+            f"Session lengths after truncation: {get_session_lengths(segments_df, resample_rate_hz).describe()}")
+
     logger.info("Extracting features...")
     segments_df = extract_features(segments_df,
                                    multi_processing,
@@ -413,19 +467,31 @@ def pipeline(crop_start_s: float = typer.Option(get_env_variable('START_CROP_SEC
         os.makedirs(output_dir, exist_ok=True)
 
     logger.info("Splitting and processing data...")
+
+    # log counts for labels per file_hash count and percentage
+    logger.debug(
+        f"Segments label counts by {split_by}: {segments_df.groupby(split_by).first()['label'].value_counts()}")
+
+    logger.debug(
+        f"Segments label counts by {split_by} (%): {segments_df.groupby(split_by).first()['label'].value_counts(normalize=True)}")
+
     if k_folds:
         paths = get_partition_paths(k_folds=k_folds)
-        folds = split_data(segments_df, validation_size, k_folds)
+        folds = split_data(segments_df, split_by, validation_size, stratify, k_folds)
 
         for i, (train_data, val_data) in enumerate(folds):
+            logger.debug(f"Fold {i + 1}: Train: {len(train_data)} ({len(train_data) / len(segments_df) * 100:.2f}%)"
+                         f" - Validate: {len(val_data)} ({len(val_data) / len(segments_df) * 100:.2f}%)")
+
             train_data, val_data = scale_and_transform_data(train_data, val_data, scaler_type, pca_components)
             save_partitions(train_data, val_data, paths[i])
     else:
-        train_data, val_data = split_data(segments_df, validation_size)
-        train_data, val_data = scale_and_transform_data(train_data, val_data, scaler_type, pca_components)
+        train_data, val_data = split_data(segments_df, split_by, validation_size, stratify)
+        logger.debug(f"Train: {len(train_data)} ({len(train_data) / len(segments_df) * 100:.2f}%)"
+                     f" - Validate: {len(val_data)} ({len(val_data) / len(segments_df) * 100:.2f}%)")
 
-        paths = get_partition_paths(k_folds=k_folds)
-        save_partitions(train_data, val_data, paths)
+        train_data, val_data = scale_and_transform_data(train_data, val_data, scaler_type, pca_components)
+        save_partitions(train_data, val_data, get_partition_paths(k_folds=k_folds))
 
     logger.info("Data preparation completed.")
 
