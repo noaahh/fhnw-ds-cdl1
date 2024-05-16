@@ -175,10 +175,12 @@ def extract_segment_features(df, segment_id, columns, moving_window_size, use_ff
             })
 
         if smoothing in ('butterworth', True):
-            segment_features[f'{column}_butterworth_smoothed'] = apply_butterworth_filter(segment[column], order=4, cutoff=0.1)
+            segment_features[f'{column}_butterworth_smoothed'] = apply_butterworth_filter(segment[column], order=4,
+                                                                                          cutoff=0.1)
         if smoothing == 'wavelet':
-            segment_features[f'{column}_wavelet_smoothed'] = apply_wavelet_denoising(segment[column], wavelet='db4', level=1)
-        
+            segment_features[f'{column}_wavelet_smoothed'] = apply_wavelet_denoising(segment[column], wavelet='db4',
+                                                                                     level=1)
+
         # Moving average
         if moving_window_size:
             segment_features[f'{column}_moving_avg'] = calculate_moving_average(segment, column, moving_window_size)
@@ -209,7 +211,8 @@ def extract_features(df: pd.DataFrame, multi_processing: bool, n_jobs: int,
                                           for segment_id in tqdm(segment_ids, desc="Extracting features"))
     else:
         results = [
-            extract_segment_features(df, segment_id, float_columns, moving_window_size, use_fft, use_pears_corr)
+            extract_segment_features(df, segment_id, float_columns, moving_window_size, use_fft, use_pears_corr,
+                                     smoothing)
             for segment_id in tqdm(segment_ids, desc="Extracting features")]
 
     features_df = pd.concat(results, axis=0)
@@ -314,7 +317,8 @@ def pipeline(crop_start_s: float = typer.Option(get_env_variable('START_CROP_SEC
              moving_window_size_s: float = typer.Option(None, help="Moving window size in seconds"),
              fft: bool = typer.Option(False, help="Calculate FFT features"),
              pearson_corr: bool = typer.Option(False, help="Calculate Pearson correlation features"),
-             smoothing: str = typer.Option("false", callback=validate_smoothing, help="Smoothing method: 'butterworth', 'wavelet', 'true', or 'false'"),
+             smoothing: str = typer.Option("false", callback=validate_smoothing,
+                                           help="Smoothing method: 'butterworth', 'wavelet', 'true', or 'false'"),
 
              validation_size: float = typer.Option(0.2, help="Validation set size in proportion to the data set"),
              k_folds: int = typer.Option(None, help="Number of splits for cross-validation"),
