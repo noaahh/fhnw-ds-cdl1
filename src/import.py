@@ -44,7 +44,6 @@ def setup_logging(verbose: bool):
 def filter_measurement_files(measurement_files):
     """Filters out measurement files based on specific criteria."""
     return [mf for mf in tqdm(measurement_files, desc="Filtering files", unit="file") if
-            mf.get_metadata()['device_name'] != 'iPhone X' and
             mf.get_label() is not None and
             mf.get_measurement_group() is not None and
             mf.generate_file_hash() not in imported_local_files and
