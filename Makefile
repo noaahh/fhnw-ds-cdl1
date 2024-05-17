@@ -9,6 +9,12 @@ setup:
 	conda activate $(CONDA_ENV_NAME)
 	pip install -r requirements.txt
 
+start-influxdb:
+	docker-compose up -d influxdb
+
+teardown-influxdb:
+	docker-compose down influxdb --volumes --remove-orphans
+
 pipeline:
 	python $(DATA_PIPELINE)
 
