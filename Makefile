@@ -5,7 +5,7 @@ TRAIN_MODEL_TORCH=src/train_torch.py
 TRAIN_MODEL_SKLEARN=src/train_sklearn.py
 
 setup:
-	conda create --name $(CONDA_ENV_NAME) python=3.8
+	conda create --name $(CONDA_ENV_NAME) python=3.11
 	conda activate $(CONDA_ENV_NAME)
 	pip install -r requirements.txt
 
