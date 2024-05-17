@@ -149,7 +149,7 @@ def import_data(run_periodically: bool = typer.Option(False, help="Enable period
     VERBOSE = verbose
     setup_logging(verbose)
 
-    raw_data_dir = os.path.join(get_env_variable("DATA_DIR"), "raw")
+    raw_data_dir = os.path.join(get_env_variable("PROJECT_ROOT"), "data", "raw")
 
     logger.info("--- PARAMETERS ---")
     logger.info(f"INFLUXDB_URL: {get_env_variable('INFLUXDB_URL')}")

@@ -2,8 +2,8 @@ import logging
 import os
 
 import pandas as pd
-from dotenv import load_dotenv
 import typer
+from dotenv import load_dotenv
 
 load_dotenv()
 
@@ -20,15 +20,14 @@ def get_env_variable(variable_name):
 
 
 PARTITION_PATHS_KEYS = ['train', 'validate']
-PARTITIONS_DIR = os.path.join(get_env_variable("DATA_DIR"), "partitions")
 
 
-def get_partition_paths(root_output_dir=PARTITIONS_DIR, k_folds=None):
+def get_partition_paths(root_partition_dir, k_folds=None):
     partition_paths = []
 
     if k_folds is not None:
         for i in range(k_folds):
-            fold_dir = os.path.join(root_output_dir, f'fold_{i}')
+            fold_dir = os.path.join(root_partition_dir, f'fold_{i}')
 
             partition_paths.append({
                 'train': os.path.join(fold_dir, 'train.parquet'),
@@ -36,8 +35,8 @@ def get_partition_paths(root_output_dir=PARTITIONS_DIR, k_folds=None):
             })
     else:
         partition_paths = {
-            'train': os.path.join(root_output_dir, 'train.parquet'),
-            'validate': os.path.join(root_output_dir, 'val.parquet')
+            'train': os.path.join(root_partition_dir, 'train.parquet'),
+            'validate': os.path.join(root_partition_dir, 'val.parquet')
         }
 
     return partition_paths

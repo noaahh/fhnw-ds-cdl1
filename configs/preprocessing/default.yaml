@@ -1,0 +1,22 @@
+crop:
+  start_seconds: 5
+  end_seconds: 5
+
+resample_rate_hz: 50
+segment_size_seconds: 5
+overlap_seconds: 2
+
+# Limits the maximum length of a session (file) in seconds
+max_session_length_s: null
+
+feature_extraction:
+  moving_window_size_s: null
+  use_fft: False
+  use_pearson_corr: False
+  smoothing: False
+
+scaling:
+  type: standard
+
+pca:
+  components: null

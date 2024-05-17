@@ -1,0 +1,5 @@
+bucket: ${oc.env:INFLUXDB_INIT_BUCKET}
+org: ${oc.env:INFLUXDB_INIT_ORG}
+url: ${oc.env:INFLUXDB_URL}
+
+use_cache: True

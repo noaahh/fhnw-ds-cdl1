@@ -45,15 +45,16 @@ def cross_validate(data, model: BaseEstimator, metrics: dict, k_folds: int):
     print(avg_results)
 
 
-@hydra.main(version_base="1.3", config_path="../configs", config_name="sklearn_train.yaml")
+@hydra.main(version_base="1.3", config_path="../configs", config_name="train_sklearn.yaml")
 def main(cfg: DictConfig) -> None:
     print(OmegaConf.to_yaml(cfg))
 
     if cfg.get("seed"):
         np.random.seed(cfg.seed)
 
-    k_folds = cfg.data.get("k_folds", None)
-    data = get_partitioned_data(get_partition_paths(k_folds=k_folds))
+    k_folds = cfg.partitioning.get("k_folds", None)
+    data = get_partitioned_data(get_partition_paths(k_folds=k_folds,
+                                                    root_partition_dir=cfg.paths.partitioned_data_dir))
 
     model = hydra.utils.instantiate(cfg.model)
 

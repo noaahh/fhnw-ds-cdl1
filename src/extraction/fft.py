@@ -1,8 +1,6 @@
 import numpy as np
 from scipy.signal import welch
 
-from src.utils import get_env_variable
-
 
 def dominant_frequency(signal, sampling_rate):
     N = len(signal)
@@ -61,7 +59,7 @@ def spectral_flux(signal, sampling_rate):
     return np.sqrt(np.sum(np.diff(fft_values) ** 2))
 
 
-def extract_fft_features(signal_column, sampling_rate=get_env_variable('RESAMPLE_RATE_HZ')):
+def extract_fft_features(signal_column, sampling_rate):
     """Extract FFT related features from signal data."""
     assert sampling_rate, "Sampling rate not set in environment variables."
 

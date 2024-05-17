@@ -2,17 +2,15 @@ import numpy as np
 import pywt
 import scipy.signal as signal
 
-from src.utils import get_env_variable
 
-
-def _calc_butterworth_filter(order, cutoff, sampling_rate=get_env_variable('RESAMPLE_RATE_HZ')):
+def _calc_butterworth_filter(order, cutoff, sampling_rate):
     nyquist = 0.5 * sampling_rate
     normal_cutoff = cutoff / nyquist
     b, a = signal.butter(order, normal_cutoff, btype='low', analog=False)
     return b, a
 
 
-def apply_butterworth_filter(signal, order, cutoff, sampling_rate=get_env_variable('RESAMPLE_RATE_HZ')):
+def apply_butterworth_filter(signal, order, cutoff, sampling_rate):
     b, a = _calc_butterworth_filter(order, cutoff, sampling_rate)
     return signal.filtfilt(b, a, signal)
 

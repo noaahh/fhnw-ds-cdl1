@@ -1,0 +1,15 @@
+root_dir: ${oc.env:PROJECT_ROOT}
+
+data_dir: ${paths.root_dir}/data
+raw_data_dir: ${paths.data_dir}/raw
+cache_data_dir: ${paths.data_dir}/cache
+partitioned_data_dir: ${paths.data_dir}/partitions
+
+
+log_dir: ${paths.root_dir}/logs/
+
+# path to output directory, created dynamically by hydra
+# path generation pattern is specified in `configs/hydra/default.yaml`
+# use it to store all files generated during the run, like ckpts and metrics
+output_dir: ${hydra:runtime.output_dir}
+work_dir: ${hydra:runtime.cwd}

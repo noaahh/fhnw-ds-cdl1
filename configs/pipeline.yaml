@@ -1,0 +1,14 @@
+defaults:
+  - _self_
+  - data: sensor
+  - database: default
+  - preprocessing: default
+  - partitioning: default
+  - paths: default
+
+  - model: null # Added to enable override in experiment config
+  - experiment: null
+
+n_jobs: null
+verbose: true
+seed: 1337

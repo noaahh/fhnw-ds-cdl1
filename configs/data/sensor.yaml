@@ -1,8 +1,6 @@
-_target_: src.data.sensor_datamodule.SensorDataModule
+_target_: src.data.dataset.SensorDataModule
 
 batch_size: 128
 
 num_workers: null # null means using the number of CPU cores
 pin_memory: True
-
-k_folds: null

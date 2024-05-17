@@ -67,17 +67,19 @@ def seed_everything(seed):
         L.seed_everything(seed, workers=True)
 
 
-@hydra.main(version_base="1.3", config_path="../configs", config_name="lightning_train.yaml")
+@hydra.main(version_base="1.3", config_path="../configs", config_name="train_torch.yaml")
 def train(cfg):
     seed_everything(cfg.get("seed"))
 
     print(OmegaConf.to_yaml(cfg))
 
-    k_folds = int(cfg.data.get("k_folds")) if cfg.data.get("k_folds") else None
-    if k_folds is not None:
-        raise NotImplementedError("K-Fold training is not yet supported")
+    k_folds = int(cfg.partitioning.get("k_folds", 0))
+    if k_folds != 0:
+        log.warning("Cross-validation is not supported yet and will be ignored.")
 
-    datamodule = hydra.utils.instantiate(cfg.data)
+    datamodule = hydra.utils.instantiate(cfg.data,
+                                         k_folds=k_folds,
+                                         partitioned_data_dir=cfg.paths.partitioned_data_dir)
     datamodule.setup(stage='fit')
 
     model = hydra.utils.instantiate(cfg.model)

@@ -1,0 +1,4 @@
+validation_size: 0.2
+k_folds: 5
+stratify: True
+split_by: session_id # alternative: segment_id
