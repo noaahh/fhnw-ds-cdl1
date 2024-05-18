@@ -56,10 +56,11 @@ def create_logger(cfg, group_id):
 
 
 def create_callbacks(cfg):
-    return [ModelCheckpoint(monitor="val_acc",
+    return [ModelCheckpoint(monitor="val_f1",
                             mode="max",
                             dirpath=cfg.get("ckpt_path"),
-                            verbose=True)]
+                            save_last=True,
+                            verbose=False)]
 
 
 def seed_everything(seed):
@@ -73,9 +74,10 @@ def train(cfg):
 
     print(OmegaConf.to_yaml(cfg))
 
-    k_folds = int(cfg.partitioning.get("k_folds", 0))
-    if k_folds != 0:
+    k_folds = cfg.partitioning.get("k_folds", None)
+    if k_folds:
         log.warning("Cross-validation is not supported yet and will be ignored.")
+        k_folds = None
 
     datamodule = hydra.utils.instantiate(cfg.data,
                                          k_folds=k_folds,
@@ -98,11 +100,16 @@ def train(cfg):
         "cfg": cfg,
         "model": model,
         "trainer": trainer,
-        "datamodule": datamodule
+        "datamodule": datamodule,
+        "partitioning": cfg.partitioning,
     })
 
     train_dataloader, val_dataloader = datamodule.train_dataloader(), datamodule.val_dataloader()
-    trainer.fit(model, train_dataloader, val_dataloader)
+
+    if cfg.get("ckpt_path"):
+        log.info(f"Training will be resumed from checkpoint at: {cfg.get('ckpt_path')}")
+
+    trainer.fit(model, train_dataloader, val_dataloader, ckpt_path=cfg.get("ckpt_path"))
 
     log.info("Training complete!")
 

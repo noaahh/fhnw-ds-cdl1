@@ -4,7 +4,7 @@ defaults:
   - partitioning: default
   - model: deep_res_bidir_lstm
   - data: sensor
-  - trainer: default
+  - trainer: mps
 
   - experiment: null
 
