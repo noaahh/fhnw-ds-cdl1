@@ -96,7 +96,7 @@ def truncate_sessions(segments_df: pd.DataFrame, cfg: dict) -> pd.DataFrame:
 
     resample_rate_hz = cfg.preprocessing.resample_rate_hz
     segment_size_seconds = cfg.preprocessing.segment_size_seconds
-    max_session_length_s = cfg.preprocessing.get("max_session_length_s", None)
+    max_session_length_s = cfg.preprocessing.max_session_length_s
 
     logger.info(
         f"Session lengths before truncation: {get_session_lengths(segments_df, resample_rate_hz).describe()}")
@@ -106,8 +106,8 @@ def truncate_sessions(segments_df: pd.DataFrame, cfg: dict) -> pd.DataFrame:
     max_count_segments = math.floor(max_session_length_s / segment_size_seconds)
     truncated_segments_df = segments_df.groupby('session_id').apply(
         lambda x: x[x['segment_id'].isin(
-            x['segment_id'].drop_duplicates().sample(
-                n=min(x['segment_id'].drop_duplicates().shape[0], max_count_segments))
+            x['segment_id'].drop_duplicates().sample(  # sample from unique segment IDs
+                n=min(x['segment_id'].drop_duplicates().shape[0], max_count_segments), random_state=cfg.seed)
         )]
     ).reset_index(drop=True)
 
@@ -260,41 +260,52 @@ def extract_features(df: pd.DataFrame, cfg: dict) -> pd.DataFrame:
     return df
 
 
-def split_data(df: pd.DataFrame, split_by: str, val_size: float, stratify: bool, k_folds: int = None) -> tuple | list:
+def split_data(segments_df: pd.DataFrame, cfg: dict) -> tuple | list:
     """Split data into train and validation sets or perform K-fold split."""
-    assert split_by in df.columns, "Split column not found in the DataFrame."
+    split_by = cfg.partitioning.split_by
+    val_size = cfg.partitioning.validation_size
+    k_folds = cfg.partitioning.k_folds
+    stratify = cfg.partitioning.stratify
 
-    grouped = df.groupby(split_by).first().reset_index()
+    assert split_by in segments_df.columns, "Split column not found in the DataFrame."
+
+    logger.debug(
+        f"Segments label counts by {split_by}: {segments_df.groupby(split_by).first()['label'].value_counts()}")
+
+    logger.debug(
+        f"Segments label counts by {split_by} (%): {segments_df.groupby(split_by).first()['label'].value_counts(normalize=True)}")
+
+    grouped = segments_df.groupby(split_by).first().reset_index()
     assert grouped[split_by].nunique() == len(grouped), "Split column contains duplicate values."
 
     if k_folds:
         folds = []
 
         if stratify:
-            kf = StratifiedKFold(n_splits=k_folds, shuffle=True, random_state=1337)
+            kf = StratifiedKFold(n_splits=k_folds, shuffle=True, random_state=cfg.seed)
             splits = kf.split(grouped, grouped['label'])
         else:
-            kf = KFold(n_splits=k_folds, shuffle=True, random_state=1337)
+            kf = KFold(n_splits=k_folds, shuffle=True, random_state=cfg.seed)
             splits = kf.split(grouped)
 
         for train_idx, val_idx in splits:
             train_ids = grouped.loc[train_idx, split_by]
             val_ids = grouped.loc[val_idx, split_by]
-            train_mask = df[split_by].isin(train_ids)
-            val_mask = df[split_by].isin(val_ids)
-            folds.append((df[train_mask], df[val_mask]))
+            train_mask = segments_df[split_by].isin(train_ids)
+            val_mask = segments_df[split_by].isin(val_ids)
+            folds.append((segments_df[train_mask], segments_df[val_mask]))
 
         return folds
     else:
         train_idxs, val_idxs = train_test_split(grouped,
                                                 test_size=val_size,
                                                 stratify=grouped['label'] if stratify else None,
-                                                shuffle=True, random_state=1337)
+                                                shuffle=True, random_state=cfg.seed)
         train_ids = train_idxs[split_by]
         val_ids = val_idxs[split_by]
-        train_mask = df[split_by].isin(train_ids)
-        val_mask = df[split_by].isin(val_ids)
-        return df[train_mask], df[val_mask]
+        train_mask = segments_df[split_by].isin(train_ids)
+        val_mask = segments_df[split_by].isin(val_ids)
+        return segments_df[train_mask], segments_df[val_mask]
 
 
 def get_scaler(scaler_type: str) -> object:
@@ -396,20 +407,10 @@ def pipeline(cfg):
         os.makedirs(partitioned_data_dir, exist_ok=True)
 
     logger.info("Splitting and processing data...")
-
-    split_by = cfg.partitioning.split_by
-    logger.debug(
-        f"Segments label counts by {split_by}: {segments_df.groupby(split_by).first()['label'].value_counts()}")
-
-    logger.debug(
-        f"Segments label counts by {split_by} (%): {segments_df.groupby(split_by).first()['label'].value_counts(normalize=True)}")
-
-    k_folds = cfg.partitioning.k_folds
-    validation_size = cfg.partitioning.validation_size
-    stratify = cfg.partitioning.stratify
+    k_folds = cfg.partitioning.get("k_folds", None)
     if k_folds:
         paths = get_partition_paths(partitioned_data_dir, k_folds=k_folds)
-        folds = split_data(segments_df, split_by, validation_size, stratify, k_folds)
+        folds = split_data(segments_df, cfg)
 
         for i, (train_data, val_data) in enumerate(folds):
             logger.debug(f"Fold {i + 1}: Train: {len(train_data)} ({len(train_data) / len(segments_df) * 100:.2f}%)"
@@ -418,7 +419,7 @@ def pipeline(cfg):
             train_data, val_data = scale_and_transform_data(train_data, val_data, cfg)
             save_partitions(train_data, val_data, paths[i])
     else:
-        train_data, val_data = split_data(segments_df, split_by, validation_size, stratify)
+        train_data, val_data = split_data(segments_df, cfg)
         logger.debug(f"Train: {len(train_data)} ({len(train_data) / len(segments_df) * 100:.2f}%)"
                      f" - Validate: {len(val_data)} ({len(val_data) / len(segments_df) * 100:.2f}%)")
 
