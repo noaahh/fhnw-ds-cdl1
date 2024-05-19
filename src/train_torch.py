@@ -1,5 +1,6 @@
 import hydra
 import lightning as L
+
 import rootutils
 from lightning.pytorch.callbacks import ModelCheckpoint
 from lightning.pytorch.loggers import WandbLogger
@@ -113,7 +114,6 @@ def train(cfg):
     trainer.fit(model, train_dataloader, val_dataloader, ckpt_path=cfg.get("ckpt_path"))
 
     log.info("Training complete!")
-
 
 if __name__ == "__main__":
     train()
