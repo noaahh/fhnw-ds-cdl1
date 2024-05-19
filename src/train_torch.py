@@ -52,6 +52,7 @@ def create_logger(cfg, group_id):
     return WandbLogger(project=get_env_variable("WANDB_PROJECT"),
                        entity=get_env_variable("WANDB_ENTITY"),
                        group=group_id,
+                       save_dir=cfg.paths.output_dir,
                        log_model=True)
 
 

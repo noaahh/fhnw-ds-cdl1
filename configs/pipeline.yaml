@@ -6,6 +6,7 @@ defaults:
   - partitioning: default
   - paths: default
 
+  - trainer: null
   - model: null # Added to enable override in experiment config
   - experiment: null
 
