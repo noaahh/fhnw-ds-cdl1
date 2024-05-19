@@ -28,9 +28,12 @@ endif
 teardown-influxdb:
 	docker-compose down influxdb --volumes --remove-orphans
 
+stop-influxdb:
+	docker-compose stop influxdb
+
 clean:
 	rm -rf outputs/*
 	rm -rf $(CONDA_ENV_NAME)/*
 	rm -rf data/cache/*
 
-.PHONY: setup import-latest run-experiment teardown-influxdb clean
+.PHONY: setup import-latest run-experiment teardown-influxdb stop-influxdb clean
