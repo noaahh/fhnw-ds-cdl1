@@ -62,6 +62,8 @@ class SensorDatasetSKLearn:
         else:
             processed_df = single_value_df
 
+        processed_df.reset_index(drop=True, inplace=True)
+
         return processed_df, self.labels
 
 
@@ -209,7 +211,6 @@ from lightning import LightningDataModule
 from torch.utils.data import DataLoader, Dataset
 
 from pl_bolts.utils import _SKLEARN_AVAILABLE
-from pl_bolts.utils.stability import under_review
 from pl_bolts.utils.warnings import warn_missing_pkg
 
 if _SKLEARN_AVAILABLE:
@@ -218,57 +219,33 @@ else:  # pragma: no cover
     warn_missing_pkg("sklearn", pypi_name="scikit-learn")
 
 
-@under_review()
 class SklearnDataset(Dataset):
-    """Mapping between numpy (or sklearn) datasets to PyTorch datasets.
-
-    Args:
-        X: Numpy ndarray
-        y: Numpy ndarray
-        x_transform: Any transform that works with Numpy arrays
-        y_transform: Any transform that works with Numpy arrays
-
-    Example:
-        >>> from sklearn.datasets import load_diabetes
-        >>> from pl_bolts.datamodules import SklearnDataset
-        ...
-        >>> X, y = load_diabetes(return_X_y=True)
-        >>> dataset = SklearnDataset(X, y)
-        >>> len(dataset)
-        442
-    """
-
-    def __init__(
-            self,
-            X: np.ndarray,  # noqa: N803
-            y: np.ndarray,
-            x_transform: Any = None,
-            y_transform: Any = None,
-    ) -> None:
-        super().__init__()
-        self.data = X
-        self.labels = y
+    def __init__(self, data_df: pd.DataFrame, x_transform: Any = None, y_transform: Any = None) -> None:
+        self.sensor_dataset = SensorDatasetSKLearn(data_df)
+        self.data, self.labels = self.sensor_dataset.get_data()
         self.data_transform = x_transform
         self.labels_transform = y_transform
 
     def __len__(self) -> int:
         return len(self.data)
 
-    def __getitem__(self, idx) -> Tuple[np.ndarray, np.ndarray]:
+    def __getitem__(self, idx) -> Tuple[torch.Tensor, torch.Tensor]:
         x = self.data[idx].astype(np.float32)
         y = self.labels[idx]
 
-        # Do not convert integer to float for classification data
-        if not ((y.dtype == np.int32) or (y.dtype == np.int64)):
-            y = y.astype(np.float32)
-
+        # Apply transforms if any
         if self.data_transform:
             x = self.data_transform(x)
 
         if self.labels_transform:
             y = self.labels_transform(y)
+        else:
+            y = ONE_HOT_VECTORS[y]
 
-        return x, y
+        x_tensor = torch.from_numpy(x)
+        y_tensor = y if isinstance(y, torch.Tensor) else torch.tensor(y)
+
+        return x_tensor, y_tensor
 
 class SklearnDataModule(LightningDataModule):
     name = "sklearn"
@@ -400,21 +377,14 @@ class SensorDataModuleBolt(LightningDataModule):
         train_df = partition['train']
         val_df = partition['validate']
 
-        train_dataset = SensorDatasetSKLearn(train_df)
-        val_dataset = SensorDatasetSKLearn(val_df)
-
-        X_train, y_train = train_dataset.get_data()
-        X_val, y_val = val_dataset.get_data()
-
-        self.train_data_module = SklearnDataModule(X_train, y_train, batch_size=self.batch_size)
-        self.val_data_module = SklearnDataModule(X_val, y_val, batch_size=self.batch_size)
+        self.train_dataset = SklearnDataset(train_df)
+        self.val_dataset = SklearnDataset(val_df)
 
     def train_dataloader(self):
-        return self.train_data_module.train_dataloader()
+        return DataLoader(self.train_dataset, batch_size=self.batch_size, shuffle=True, num_workers=self.num_workers, pin_memory=self.pin_memory)
 
     def val_dataloader(self):
-        return self.val_data_module.val_dataloader()
+        return DataLoader(self.val_dataset, batch_size=self.batch_size, shuffle=False, num_workers=self.num_workers, pin_memory=self.pin_memory)
 
     def test_dataloader(self):
         raise NotImplementedError("Test data loader not implemented.")
-
