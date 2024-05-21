@@ -26,7 +26,6 @@ class MulticlassLogisticRegression(pl.LightningModule):
         x, y = batch
         y_hat = self(x)
         y = y.argmax(dim=1)
-        print(f"y_hat: {y_hat.shape}, y: {y.shape}")
         loss = nn.CrossEntropyLoss()(y_hat, y)
         acc = self.accuracy(y_hat.argmax(dim=1), y)
         f1 = self.f1(y_hat.argmax(dim=1), y)
