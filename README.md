@@ -83,7 +83,13 @@ make import-latest
 To run an experiment (you can specify the framework and whether to run the data pipeline):
 
 ```bash
-make run-experiment FRAMEWORK=sklearn EXPERIMENT_NAME=my_experiment RUN_PIPELINE=yes
+make run-experiment FRAMEWORK=sklearn EXPERIMENT_NAME=my_experiment RUN_PIPELINE=1
+```
+
+or without running the data pipeline:
+
+```bash
+make run-experiment FRAMEWORK=sklearn EXPERIMENT_NAME=my_experiment RUN_PIPELINE=0
 ```
 
 To clean up resources and remove temporary files:
