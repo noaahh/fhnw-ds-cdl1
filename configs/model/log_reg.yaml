@@ -1,3 +1,2 @@
-_target_: "sklearn.linear_model.LogisticRegression"
-random_state: 1337
-max_iter: 1000
+_target_: src.models.log_reg_lit.MulticlassLogisticRegression
+input_dim: 4016

@@ -1,11 +1,10 @@
 import torch
+from lightning import LightningModule
 from torch import nn
 from torchmetrics import Accuracy, F1Score
-import lightning as pl
 
-from src.data.dataset import SensorDataModule
 
-class MulticlassLogisticRegression(pl.LightningModule):
+class MulticlassLogisticRegression(LightningModule):
     def __init__(self, input_dim, num_classes):
         super(MulticlassLogisticRegression, self).__init__()
         self.input_dim = input_dim
@@ -56,18 +55,3 @@ class MulticlassLogisticRegression(pl.LightningModule):
         self.log('test_acc', acc, on_step=True, on_epoch=True, prog_bar=True)
         self.log('test_f1', f1, on_step=True, on_epoch=True, prog_bar=True)
         return loss
-
-# Example usage
-if __name__ == "__main__":
-    # Dummy data for testing
-    input_dim = 4016
-    num_classes = 5
-    model = MulticlassLogisticRegression(input_dim, num_classes)
-
-    # Dummy dataset
-    sdm = SensorDataModule(32, partitioned_data_dir="../../data/partitions", k_folds=5)
-    sdm.setup()
-
-    trainer = pl.Trainer(max_epochs=10)
-    trainer.fit(model, sdm)
-
