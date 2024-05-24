@@ -1,0 +1,16 @@
+# @package _global_
+
+defaults:
+  - override /model: attention_rnn
+  - override /trainer: mps
+  - override /partitioning: default
+
+partitioning:
+  k_folds: null
+  stratify: True
+
+model:
+  feature_dim: 16
+
+trainer:
+  max_epochs: 30
