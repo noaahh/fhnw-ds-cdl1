@@ -5,6 +5,7 @@ DATA_PIPELINE=src/data_pipeline.py
 TRAIN_MODEL_TORCH=src/train_torch.py
 TRAIN_MODEL_SKLEARN=src/train_sklearn.py
 
+RUN_PIPELINE ?= 1
 EXPERIMENT_NAME ?= log_reg
 FRAMEWORK ?= sklearn
 
@@ -18,7 +19,9 @@ import-latest:
 	python $(IMPORT_DATA) --verbose
 
 run-experiment:
+ifeq ($(RUN_PIPELINE),1)
 	python $(DATA_PIPELINE) experiment=$(EXPERIMENT_NAME)
+endif
 ifeq ($(FRAMEWORK),torch)
 	python $(TRAIN_MODEL_TORCH) experiment=$(EXPERIMENT_NAME)
 else
