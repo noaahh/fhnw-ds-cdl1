@@ -35,6 +35,8 @@ def log_hyperparameters(object_dict):
 
     hparams["data"] = cfg["data"]
     hparams["trainer"] = cfg["trainer"]
+    hparams["partitioning"] = cfg["partitioning"]
+    hparams["preprocessing"] = cfg["preprocessing"]
 
     hparams["callbacks"] = cfg.get("callbacks")
     hparams["extras"] = cfg.get("extras")

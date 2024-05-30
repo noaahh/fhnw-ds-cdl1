@@ -13,7 +13,11 @@ feature_extraction:
   moving_window_size_s: null
   use_fft: False
   use_pearson_corr: False
-  smoothing: False
+
+smoothing:
+  type: 'butterworth'
+  cutoff: 6
+  order: 4
 
 scaling:
   type: standard
