@@ -132,6 +132,12 @@ def smooth_signal(segment, cfg):
             wavelet = cfg.preprocessing.smoothing.wavelet
             level = cfg.preprocessing.smoothing.level
             segment[column] = apply_wavelet_denoising(segment[column], wavelet, level)
+        elif smoothing_type == 'moving_avg':
+            moving_window_size_s = cfg.preprocessing.smoothing.moving_window_size_s
+            moving_window_size = calc_window_size(moving_window_size_s, cfg.preprocessing.resample_rate_hz)
+            segment[column] = calculate_moving_average(segment, column, moving_window_size)
+            segment[column].iloc[:moving_window_size] = segment[column].iloc[moving_window_size]
+
     return segment
 
 
@@ -165,7 +171,7 @@ def prepare_time_series_segments(data: pd.DataFrame, cfg: dict) -> pd.DataFrame:
                                             cfg.preprocessing.crop.start_seconds,
                                             cfg.preprocessing.crop.end_seconds)
         except Exception as e:
-            logger.warning(f"Error processing file {file_hash}. Skipping file: {e}")
+            logger.warning(f"Error cropping file {file_hash}. Skipping file: {e}")
             skipped_files += 1
             continue
 
@@ -223,12 +229,6 @@ def extract_segment_features(df: pd.DataFrame, segment_id: str, source_cols: lis
                 f'{column}_{k}': pd.Series([v] * len(segment), index=segment.index)
                 for k, v in fft_features.items()
             })
-
-        # Moving average
-        moving_window_size_s = cfg.preprocessing.feature_extraction.get("moving_window_size_s", None)
-        if moving_window_size_s:
-            moving_window_size = calc_window_size(moving_window_size_s, cfg.preprocessing.resample_rate_hz)
-            segment_features[f'{column}_moving_avg'] = calculate_moving_average(segment, column, moving_window_size)
 
         # Pearson correlation
         if cfg.preprocessing.feature_extraction.get("use_pears_corr", None):

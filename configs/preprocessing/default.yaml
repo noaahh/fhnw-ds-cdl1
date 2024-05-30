@@ -10,7 +10,6 @@ overlap_seconds: 2
 max_session_length_s: null
 
 feature_extraction:
-  moving_window_size_s: null
   use_fft: False
   use_pearson_corr: False
 
