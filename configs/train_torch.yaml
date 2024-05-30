@@ -2,6 +2,7 @@ defaults:
   - _self_
   - paths: default
   - partitioning: default
+  - preprocessing: default
   - model: deep_res_bidir_lstm
   - data: sensor
   - trainer: mps
