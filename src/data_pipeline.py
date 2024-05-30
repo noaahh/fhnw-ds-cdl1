@@ -21,7 +21,7 @@ from src.data.db import InfluxDBWrapper
 from src.data.measurement_file import MeasurementFile
 from src.extraction.fft import extract_fft_features
 from src.extraction.moving_average import calculate_moving_average, calc_window_size
-from src.extraction.denoising import apply_wavelet_denoising, apply_butterworth_filter
+from src.processing.denoising import apply_wavelet_denoising, apply_butterworth_filter
 from src.processing.time_series import crop_signal, resample_signal, create_segments
 from src.utils import get_partition_paths
 
@@ -117,6 +117,24 @@ def truncate_sessions(segments_df: pd.DataFrame, cfg: dict) -> pd.DataFrame:
     return truncated_segments_df
 
 
+def smooth_signal(segment, cfg):
+    """Apply smoothing to a segment according to the configuration settings."""
+    smoothing_type = cfg.preprocessing.smoothing.get("type", None)
+    if not smoothing_type:
+        return segment
+
+    for column in segment.select_dtypes(include=['float64']).columns:
+        if smoothing_type == 'butterworth':
+            order = cfg.preprocessing.smoothing.order
+            cutoff = cfg.preprocessing.smoothing.cutoff
+            segment[column] = apply_butterworth_filter(segment[column], order, cutoff, cfg.preprocessing.resample_rate_hz)
+        elif smoothing_type == 'wavelet':
+            wavelet = cfg.preprocessing.smoothing.wavelet
+            level = cfg.preprocessing.smoothing.level
+            segment[column] = apply_wavelet_denoising(segment[column], wavelet, level)
+    return segment
+
+
 def prepare_time_series_segments(data: pd.DataFrame, cfg: dict) -> pd.DataFrame:
     assert '_time' in data.columns, "Time column not found in the DataFrame."
     assert 'file_hash' in data.columns, "File hash column not found in the DataFrame."
@@ -134,12 +152,6 @@ def prepare_time_series_segments(data: pd.DataFrame, cfg: dict) -> pd.DataFrame:
     skipped_files = 0
     for file_hash, file_data in tqdm(data.groupby('file_hash'), desc="Processing Files", unit="file"):
         if file_data.isnull().values.any() or file_data.isna().values.any():
-            columns_with_nan = file_data.columns[file_data.isnull().any()].tolist()
-            nan_percentage_per_column = file_data[columns_with_nan].isnull().mean() * 100
-
-            # logger.warning(
-            #    f"File {file_hash} contains NaN values: ({', '.join([f'{k}: {v:.2f}%' for k, v in nan_percentage_per_column.items()])}).")
-            # logger.warning(f"Skipping file {file_hash}.")
             skipped_files += 1
             continue
 
@@ -178,6 +190,9 @@ def prepare_time_series_segments(data: pd.DataFrame, cfg: dict) -> pd.DataFrame:
         for i, segment in enumerate(file_segments):
             segment = segment.copy()
             segment.reset_index(inplace=True)  # Reset index to get the time column
+
+            segment = smooth_signal(segment, cfg)
+
             segment.loc[:, 'segment_id'] = file_hash + '_' + str(i)
             segment.loc[:, 'session_id'] = file_hash
             segment.loc[:, 'label'] = label
@@ -208,19 +223,6 @@ def extract_segment_features(df: pd.DataFrame, segment_id: str, source_cols: lis
                 f'{column}_{k}': pd.Series([v] * len(segment), index=segment.index)
                 for k, v in fft_features.items()
             })
-
-        # Smoothing
-        smoothing = cfg.preprocessing.feature_extraction.get("smoothing", None)
-        if smoothing:
-            if smoothing in ('butterworth', True):
-                segment_features[f'{column}_butterworth_smoothed'] = apply_butterworth_filter(segment[column],
-                                                                                              order=4,
-                                                                                              cutoff=0.1,
-                                                                                              sampling_rate=cfg.preprocessing.resample_rate_hz)
-            elif smoothing == 'wavelet':
-                segment_features[f'{column}_wavelet_smoothed'] = apply_wavelet_denoising(segment[column],
-                                                                                         wavelet='db4',
-                                                                                         level=1)
 
         # Moving average
         moving_window_size_s = cfg.preprocessing.feature_extraction.get("moving_window_size_s", None)

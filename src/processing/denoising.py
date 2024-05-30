@@ -10,13 +10,13 @@ def _calc_butterworth_filter(order, cutoff, sampling_rate):
     return b, a
 
 
-def apply_butterworth_filter(signal, order, cutoff, sampling_rate):
+def apply_butterworth_filter(data, order, cutoff, sampling_rate):
     b, a = _calc_butterworth_filter(order, cutoff, sampling_rate)
-    return signal.filtfilt(b, a, signal)
+    return signal.filtfilt(b, a, data)
 
 
-def apply_wavelet_denoising(signal, wavelet='db4', level=1, mode='per'):
+def apply_wavelet_denoising(data, wavelet='db4', level=1, mode='per'):
     coeffs = pywt.wavedec(signal, wavelet, mode=mode, level=level)
-    threshold = np.sqrt(2 * np.log(len(signal)))
+    threshold = np.sqrt(2 * np.log(len(data)))
     new_coeffs = [pywt.threshold(c, threshold, mode='soft') for c in coeffs]
     return pywt.waverec(new_coeffs, wavelet, mode=mode)
