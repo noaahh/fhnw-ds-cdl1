@@ -2,8 +2,12 @@
 
 defaults:
   - override /model: log_reg
+  - override /trainer: mps
   - override /partitioning: default
 
 partitioning:
-  k_folds: 5
-  stratify: True
+  k_folds: null
+  stratify: False
+
+trainer:
+  max_epochs: 30

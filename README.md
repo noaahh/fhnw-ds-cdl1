@@ -26,10 +26,7 @@ flexibility and configurability for various experiments:
 - **`src/`**: Source code directory containing all scripts for data handling and model training:
     - `data_pipeline.py`: Manages the workflow from data ingestion to preprocessing and feature engineering. It is
       configured dynamically based on the experiment specifications in the Hydra configs.
-    - `train_sklearn.py`: Training script for scikit-learn models. It utilizes configurations defined in `configs/` to
-      set parameters and model behavior.
-    - `train_torch.py`: Similar to `train_sklearn.py`, but for training models using PyTorch, allowing for more complex
-      and computationally intensive models.
+    - `train.py`: Define the logic of training models using PyTorch
 
 - **`Dockerfile` and `docker-compose.yml`**: These files are crucial for defining and managing the project's container
   setup, facilitating reproducible environments and easy deployment.
@@ -80,16 +77,16 @@ To import the latest data and set up necessary infrastructure services:
 make import-latest
 ```
 
-To run an experiment (you can specify the framework and whether to run the data pipeline):
+To run an experiment (you can specify whether to run the data pipeline):
 
 ```bash
-make run-experiment FRAMEWORK=sklearn EXPERIMENT_NAME=my_experiment RUN_PIPELINE=1
+make run-experiment EXPERIMENT_NAME=my_experiment RUN_PIPELINE=1
 ```
 
 or without running the data pipeline:
 
 ```bash
-make run-experiment FRAMEWORK=sklearn EXPERIMENT_NAME=my_experiment RUN_PIPELINE=0
+make run-experiment EXPERIMENT_NAME=my_experiment RUN_PIPELINE=0
 ```
 
 To clean up resources and remove temporary files:
