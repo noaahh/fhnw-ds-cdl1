@@ -3,9 +3,11 @@ from lightning import LightningModule
 from torch import nn
 from torchmetrics import Accuracy, F1Score
 
+from src.data.dataset import NUM_CLASSES
+
 
 class MulticlassLogisticRegression(LightningModule):
-    def __init__(self, input_dim, num_classes):
+    def __init__(self, input_dim, num_classes=NUM_CLASSES):
         super(MulticlassLogisticRegression, self).__init__()
         self.input_dim = input_dim
         self.linear = nn.Linear(input_dim, num_classes)
@@ -13,9 +15,9 @@ class MulticlassLogisticRegression(LightningModule):
         self.f1 = F1Score(num_classes=num_classes, task='multiclass')
 
     def forward(self, x):
-        # Flatten the input data if it's not already
         x = x.view(x.size(0), -1)
         assert x.size(1) == self.input_dim, f"Input dimension {x.size(1)} does not match expected {self.input_dim}"
+
         return self.linear(x)
 
     def configure_optimizers(self):

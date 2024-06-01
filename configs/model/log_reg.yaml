@@ -1,2 +1,2 @@
-_target_: src.models.log_reg_lit.MulticlassLogisticRegression
+_target_: src.models.log_reg.MulticlassLogisticRegression
 input_dim: 4016
