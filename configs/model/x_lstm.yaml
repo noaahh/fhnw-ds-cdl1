@@ -1,0 +1,14 @@
+_target_: src.models.x_lstm.xLSTM
+input_dim: 16
+hidden_dim: 128
+output_dim: 5
+num_layers: 2
+dropout: 0.3
+bidirectional: false
+
+optimizer:
+  _target_: torch.optim.AdamW # Changed from Adam to AdamW as described in the paper https://arxiv.org/pdf/2405.04517
+  _partial_: true
+  lr: 0.001
+  weight_decay: 0.1 # as described in the paper https://arxiv.org/pdf/2405.04517 which is not a recommendation but a suggestion
+
