@@ -1,21 +1,15 @@
 _target_: src.models.xlstm.x_lstm.xLSTM
-input_size: 16
-hidden_size: 128
+num_layers: 3
+signature: [2, 1]
+inp_dim: 16
+head_dim: 32
+head_num: 4
 output_size: 5
-num_layers: 2
-num_blocks: 20
-dropout: 0.3
-bidirectional: false
-lstm_type: "slstm"
+p_factor: [2, 4/3]
+ker_size: 4
 
 optimizer:
   _target_: torch.optim.AdamW # Changed from Adam to AdamW as described in the paper https://arxiv.org/pdf/2405.04517
   _partial_: true
   lr: 0.001
   weight_decay: 0.1 # as described in the paper https://arxiv.org/pdf/2405.04517 which is not a recommendation but a suggestion
-
-scheduler:
-    _target_: torch.optim.lr_scheduler.CosineAnnealingLR
-    _partial_: true
-    eta_min: 0.00001
-    T_max: 30

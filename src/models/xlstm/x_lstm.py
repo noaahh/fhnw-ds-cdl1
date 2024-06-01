@@ -1,109 +1,163 @@
 import torch
 import torch.nn as nn
-
-from src.models.xlstm.s_lstm import sLSTM
-from src.models.xlstm.m_lstm import mLSTM
-import torch.nn.functional as F
 from lightning import LightningModule
+
+from torch import Tensor
+from torch.optim import AdamW
+from torch.optim import Optimizer
+import torch.nn.functional as F
 from torchmetrics import Accuracy, F1Score
 
+from typing import Any, Dict, Generator, List, Tuple, Callable, Iterable
 
-class xLSTMBlock(nn.Module):
-    def __init__(self, input_size, hidden_size, num_layers, dropout=0.0, bidirectional=False, lstm_type="slstm"):
-        super(xLSTMBlock, self).__init__()
-        self.input_size = input_size
-        self.hidden_size = hidden_size
-        self.num_layers = num_layers
-        self.dropout = dropout
-        self.bidirectional = bidirectional
-        self.lstm_type = lstm_type
+from itertools import repeat
+from einops import rearrange
 
-        if lstm_type == "slstm":
-            self.lstm = sLSTM(input_size, hidden_size, num_layers, dropout)
-        elif lstm_type == "mlstm":
-            print("Warning: mLSTM is not working yet.")
-            self.lstm = mLSTM(input_size, hidden_size, num_layers, dropout)
-        else:
-            raise ValueError(f"Invalid LSTM type: {lstm_type}")
+from src.models.xlstm.m_lstm import mLSTM
+from src.models.xlstm.s_lstm import sLSTM
+from src.models.xlstm.util import Hidden
 
-        self.norm = nn.LayerNorm(input_size)
-        self.activation = nn.GELU()
-        self.dropout_layer = nn.Dropout(dropout)
-
-        if bidirectional:
-            self.proj = nn.Linear(2 * hidden_size, input_size)
-        else:
-            self.proj = nn.Linear(hidden_size, input_size)
-
-        # print shapes
-        print(f"input_size: {input_size}")
-        print(f"hidden_size: {hidden_size}")
-        print(f"num_layers: {num_layers}")
-        print(f"dropout: {dropout}")
-        print(f"proj: {self.proj}")
-
-        self.reset_parameters()
-
-    def reset_parameters(self):
-        nn.init.xavier_uniform_(self.proj.weight)
-        nn.init.zeros_(self.proj.bias)
-
-    def forward(self, input_seq, hidden_state=None):
-        lstm_output, hidden_state = self.lstm(input_seq, hidden_state)
-        if self.lstm_type == "slstm":
-            hidden_state = [[hidden_state[i][0].detach(), hidden_state[i][1].detach()] for i in range(len(hidden_state))]
-
-        if self.bidirectional:
-            lstm_output = torch.cat((lstm_output[:, :, :self.hidden_size], lstm_output[:, :, self.hidden_size:]), dim=-1)
-
-        output = self.activation(self.proj(lstm_output))
-        output = self.norm(output + input_seq)
-        output = self.dropout_layer(output)
-
-        return output, hidden_state
+OptimizerCallable = Callable[[Iterable], Optimizer]
 
 class xLSTM(LightningModule):
-    def __init__(self, optimizer, scheduler, input_size, hidden_size, output_size, num_layers, num_blocks,
-                 dropout=0.0, bidirectional=False, lstm_type="slstm"):
-        super(xLSTM, self).__init__()
-        self.save_hyperparameters()
+    '''The extended Long Short Term Memory (xLSTM) module as
+    originally introduced in Beck et al. (2024)] see:
+    (https://arxiv.org/abs/2405.04517).
+
+    This model stacks sLSTM and mLSTM modules with residual
+    connections and offers superior memory and performance
+    compared to the standard LSTM model, achieving competitive
+    or better performance and scaling than Transformer models
+    or State-Space models.
+
+    DISCLAIMER:
+    This code was heavily inpisred by already existing implementations of the xLSTM model.
+
+    While there wasn't one perfect one, there were 2 that were used as a base for this implementation.
+
+    All the text embedding specific details were removed and adjusted accordingly.
+
+    The original repositories can be found here:
+    - https://github.com/muditbhargava66/PyxLSTM
+    - https://github.com/myscience/x-lstm
+
+    '''
+
+    def __init__(
+            self,
+            num_layers : int,
+            signature : Tuple[int, int],
+            inp_dim : int,
+            head_dim : int,
+            head_num : int,
+            output_size : int,
+            p_factor : Tuple[float, float] = (2, 4/3),
+            ker_size : int = 4,
+            optimizer : OptimizerCallable = AdamW,
+            inference_kw: Dict[str, Any] = {}
+    ) -> None:
+        '''Initialize the LLM model.
+
+        Args:
+            num_layers (int): The number of layers in the LLM model.
+            signature (Tuple[int, int]): The signature of the LLM model,
+                which represents the ration of the mLSTM-to-sLSTM blocks.
+            inp_dim (int): The dimension of the input tokens.
+            head_dim (int): The dimension of each attention head.
+            head_num (int): The number of attention heads.
+            p_factor (Tuple[float, float], optional): The expansion factor
+                for the MLP projection in the m|s-LSTM blocks. Defaults to (2, 4/3).
+            ker_size (int, optional): The kernel size for the causal convolutional layers.
+                Defaults to 4.
+
+            kwargs: Additional keyword arguments used at inference time (see relevant
+                arguments of the generate method).
+        '''
+        super().__init__()
 
         self.accuracy = Accuracy(task='multiclass', num_classes=output_size)
         self.f1_score = F1Score(num_classes=output_size, average='weighted', task='multiclass')
-        self.num_blocks = num_blocks
-        self.lstm_type = lstm_type
+        self.optimizer = optimizer
+        self.inference_kw = inference_kw
 
-        self.blocks = nn.ModuleList([
-            xLSTMBlock(input_size, hidden_size, num_layers,
-                       dropout, bidirectional, lstm_type)
-            for i in range(num_blocks)
+        m_factor, s_factor = p_factor
+
+        mlstm_par = {
+            'inp_dim' : inp_dim,
+            'head_dim' : head_dim,
+            'head_num' : head_num,
+            'p_factor' : m_factor,
+            'ker_size' : ker_size,
+        }
+
+        slstm_par = {
+            'inp_dim' : inp_dim,
+            'head_dim' : head_dim,
+            'head_num' : head_num,
+            'p_factor' : s_factor,
+            'ker_size' : ker_size,
+        }
+
+        m_num, s_num = signature
+        which = [True] * m_num + [False] * s_num
+
+        self.model : List[mLSTM | sLSTM] = nn.ModuleList([
+            mLSTM(**mlstm_par) if w else sLSTM(**slstm_par)
+            for w, _ in zip(repeat(which), range(num_layers))
         ])
 
-        self.output_layer = nn.Linear(input_size, output_size)
+        self.head = nn.Linear(inp_dim, output_size, bias=False)
 
-    def forward(self, input_seq, hidden_states=None):
-        if hidden_states is None:
-            hidden_states = [None] * self.num_blocks
+        self.save_hyperparameters()
 
-        output_seq = input_seq
-        for i, block in enumerate(self.blocks):
-            output_seq, hidden_state = block(output_seq, hidden_states[i])
-            if self.lstm_type == "slstm":
-                hidden_states[i] = [[hidden_state[j][0].detach(), hidden_state[j][1].detach()] for j in range(len(hidden_state))]
-            else:
-                hidden_states[i] = hidden_state
+    def forward(
+            self,
+            seq: Tensor,
+            hid: Hidden | None = None,
+            batch_first : bool = True,
+    ) -> Tuple[Tensor, Hidden]:
+        '''Forward pass of the xLSTM model.
 
-        # we take the last output sequence for the prediction
-        output_seq = output_seq[:, -1, :]
-        output_seq = self.output_layer(output_seq)
-        return output_seq
+        Args:
+            tok (Tensor): Input tensor representing the sequence tokens.
+                Expected shape: (batch, seq_len) if batch_first=True,
+                else (seq_len, batch).
+            hid (Hidden, optional): Cache object for storing intermediate hidden
+                values of the m|s-LSTM blocks of the model. If None, the hidden
+                states are initialized by the models. Defaults to None.
+
+        Returns:
+            Tuple[Tensor, Hidden]: Returns tensor of predicted logits of shape
+                (batch, seq_len, vocab_size) if batch_first=True or of shape
+                (seq_len, batch, vocab_size) if batch_first=False, and the
+                updated hidden model states.
+        '''
+
+
+        if batch_first: seq = rearrange(seq, 'b s i -> s b i')
+        if hid is None: hid = [l.init_hidden(seq.size(1)) for l in self.model]
+
+        # Pass the sequence through the mLSTM and sLSTM blocks
+        out = []
+        for inp in seq:
+            # Compute model output and update the hidden states
+            for i, lstm in enumerate(self.model):
+                inp, hid[i] = lstm(inp, hid[i])
+
+            out.append(inp)
+
+        out = torch.stack(out, dim=1 if batch_first else 0)
+        out = self.head(out)
+        out = out[:, -1, :]
+
+        return out, hid
 
     def _shared_step(self, batch, batch_idx):
         x, y = batch
-        logits = self(x)
-        preds = torch.argmax(logits, dim=1)
-        y = torch.argmax(y, dim=1)
-        loss = F.cross_entropy(logits, y)
+        logits, hid = self(x)
+        preds = torch.argmax(logits, dim=1).float()
+        loss = F.cross_entropy(logits, y.float())
+        y = torch.argmax(y, dim=1).float()
         acc = self.accuracy(preds, y)
         f1 = self.f1_score(preds, y)
         return loss, acc, f1
@@ -116,22 +170,11 @@ class xLSTM(LightningModule):
     def validation_step(self, batch, batch_idx):
         loss, acc, f1 = self._shared_step(batch, batch_idx)
         self.log_dict({"val_loss": loss, "val_acc": acc, "val_f1": f1}, prog_bar=True)
+        return loss
 
-    def configure_optimizers(self):
-        optimizer = self.hparams.optimizer(params=self.trainer.model.parameters())
-        scheduler = self.hparams.scheduler(optimizer)
+    def configure_optimizers(self) -> Optimizer:
+        optim = self.optimizer(
+            self.parameters(),
+        )
 
-        return {
-            "optimizer": optimizer,
-            "lr_scheduler": {
-                "scheduler": scheduler,
-                "interval": "epoch",
-                "frequency": 1,
-            }
-        }
-
-if __name__ == "__main__":
-    model = xLSTM(input_size=16, hidden_size=256, output_size=5, num_layers=3, num_blocks=6, lstm_type="slstm")
-    input_seq = torch.randn(10, 32, 16)  # Batch size = 10, sequence length = 32, feature size = 16
-    output_seq = model(input_seq)
-    print(output_seq.shape)  # Output shape should be [batch size, sequence length, output size]
+        return optim
