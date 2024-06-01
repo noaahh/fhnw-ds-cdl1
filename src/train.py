@@ -1,5 +1,6 @@
 import hydra
 import lightning as L
+
 import rootutils
 from lightning.pytorch.callbacks import ModelCheckpoint
 from lightning.pytorch.loggers import WandbLogger
@@ -71,7 +72,7 @@ def seed_everything(seed):
         L.seed_everything(seed, workers=True)
 
 
-@hydra.main(version_base="1.3", config_path="../configs", config_name="train_torch.yaml")
+@hydra.main(version_base="1.3", config_path="../configs", config_name="train.yaml")
 def train(cfg):
     seed_everything(cfg.get("seed"))
 
@@ -115,7 +116,6 @@ def train(cfg):
     trainer.fit(model, train_dataloader, val_dataloader, ckpt_path=cfg.get("ckpt_path"))
 
     log.info("Training complete!")
-
 
 if __name__ == "__main__":
     train()

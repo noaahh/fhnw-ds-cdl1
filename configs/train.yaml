@@ -3,7 +3,7 @@ defaults:
   - paths: default
   - partitioning: default
   - preprocessing: default
-  - model: deep_res_bidir_lstm
+  - model: log_reg
   - data: sensor
   - trainer: mps
 
