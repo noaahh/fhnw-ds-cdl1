@@ -1,8 +1,8 @@
 import torch
 import torch.nn as nn
 
-from s_lstm import sLSTM
-from m_lstm import mLSTM
+from src.models.xlstm.s_lstm import sLSTM
+from src.models.xlstm.m_lstm import mLSTM
 import torch.nn.functional as F
 from lightning import LightningModule
 from torchmetrics import Accuracy, F1Score
@@ -63,13 +63,15 @@ class xLSTMBlock(nn.Module):
         return output, hidden_state
 
 class xLSTM(LightningModule):
-    def __init__(self, optimizer, input_size, hidden_size, output_size, num_layers, num_blocks,
+    def __init__(self, optimizer, scheduler, input_size, hidden_size, output_size, num_layers, num_blocks,
                  dropout=0.0, bidirectional=False, lstm_type="slstm"):
         super(xLSTM, self).__init__()
         self.save_hyperparameters()
 
         self.accuracy = Accuracy(task='multiclass', num_classes=output_size)
         self.f1_score = F1Score(num_classes=output_size, average='weighted', task='multiclass')
+        self.num_blocks = num_blocks
+        self.lstm_type = lstm_type
 
         self.blocks = nn.ModuleList([
             xLSTMBlock(input_size, hidden_size, num_layers,
@@ -91,6 +93,8 @@ class xLSTM(LightningModule):
             else:
                 hidden_states[i] = hidden_state
 
+        # we take the last output sequence for the prediction
+        output_seq = output_seq[:, -1, :]
         output_seq = self.output_layer(output_seq)
         return output_seq
 
@@ -114,20 +118,20 @@ class xLSTM(LightningModule):
         self.log_dict({"val_loss": loss, "val_acc": acc, "val_f1": f1}, prog_bar=True)
 
     def configure_optimizers(self):
-        return self.hparams.optimizer(params=self.trainer.model.parameters())
-        # scheduler = self.hparams.scheduler(optimizer)
-        #
-        # return {
-        #     "optimizer": optimizer,
-        #     "lr_scheduler": {
-        #         "scheduler": scheduler,
-        #         "interval": "epoch",  # Specifies that step should be called after each epoch
-        #         "frequency": 1,       # Specifies that step should be called once after each epoch
-        #     }
-        # }
+        optimizer = self.hparams.optimizer(params=self.trainer.model.parameters())
+        scheduler = self.hparams.scheduler(optimizer)
 
-# if __name__ == "__main__":
-#     model = xLSTM(input_size=16, hidden_size=256, output_size=5, num_layers=3, num_blocks=6, lstm_type="slstm")
-#     input_seq = torch.randn(10, 32, 16)  # Batch size = 10, sequence length = 32, feature size = 16
-#     output_seq = model(input_seq)
-#     print(output_seq.shape)  # Output shape should be [batch size, sequence length, output size]
+        return {
+            "optimizer": optimizer,
+            "lr_scheduler": {
+                "scheduler": scheduler,
+                "interval": "epoch",
+                "frequency": 1,
+            }
+        }
+
+if __name__ == "__main__":
+    model = xLSTM(input_size=16, hidden_size=256, output_size=5, num_layers=3, num_blocks=6, lstm_type="slstm")
+    input_seq = torch.randn(10, 32, 16)  # Batch size = 10, sequence length = 32, feature size = 16
+    output_seq = model(input_seq)
+    print(output_seq.shape)  # Output shape should be [batch size, sequence length, output size]
