@@ -92,14 +92,20 @@ def create_data_loader(data_df, batch_size, shuffle=True, num_workers=-1, pin_me
 
 
 class SensorDataModule(LightningDataModule):
-    def __init__(self, batch_size, partitioned_data_dir, k_folds, num_workers=os.cpu_count(), pin_memory=True):
+    def __init__(self, batch_size, partitioned_data_dir,
+                 k_folds,
+                 num_workers=os.cpu_count(),
+                 pin_memory=True):
         super().__init__()
         self.current_fold = None
         self.train_data = None
         self.val_data = None
-        self.k_folds = None  # Currently not supported
 
-        self.partition_paths = get_partition_paths(partitioned_data_dir)
+        self.k_folds = k_folds
+        if self.k_folds is not None and self.k_folds <= 1:
+            raise ValueError("Invalid number of folds. Must be greater than 1.")
+
+        self.partition_paths = get_partition_paths(partitioned_data_dir, k_folds=k_folds)
         self.batch_size = batch_size
         self.num_workers = os.cpu_count() if num_workers is None else num_workers
         self.pin_memory = pin_memory
