@@ -1,0 +1,4 @@
+_target_: src.models.cnn.Simple1DCNN
+input_length: 4016
+input_channels: 16
+num_classes: 5
