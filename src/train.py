@@ -1,25 +1,80 @@
+import os
+
 import hydra
 import lightning as L
-
-import rootutils
 from lightning.pytorch.callbacks import ModelCheckpoint
 from lightning.pytorch.loggers import WandbLogger
+from omegaconf import OmegaConf
+import wandb
+import gc
+import torch
+
+import rootutils
 
 rootutils.setup_root(__file__, indicator=".project-root", pythonpath=True)
 
 from src.utils import get_env_variable, setup_logging
 
-from omegaconf import OmegaConf
-
 log = setup_logging()
 
 
-def log_hyperparameters(object_dict):
+def get_output_dir_path(cfg, k_fold):
+    return os.path.join(cfg.paths.output_dir, f"fold_{k_fold}") if k_fold is not None else cfg.paths.output_dir
+
+
+def instantiate_datamodule(cfg, fold_index=None):
+    if fold_index is not None:
+        data_module = hydra.utils.instantiate(cfg.data,
+                                              k_folds=cfg.partitioning.get("k_folds", 1),
+                                              partitioned_data_dir=cfg.paths.partitioned_data_dir)
+        data_module.set_current_fold(fold_index)
+        return data_module
+    else:
+        return hydra.utils.instantiate(cfg.data, k_folds=None,
+                                       partitioned_data_dir=cfg.paths.partitioned_data_dir)
+
+
+def instantiate_trainer(cfg, logger, callbacks, k_fold=None):
+    return hydra.utils.instantiate(cfg.trainer,
+                                   logger=logger,
+                                   callbacks=callbacks,
+                                   default_root_dir=get_output_dir_path(cfg, k_fold),
+                                   _convert_="partial")
+
+
+def create_callbacks(cfg, k_fold=None):
+    return [ModelCheckpoint(monitor="val_f1",
+                            mode="max",
+                            dirpath=get_output_dir_path(cfg, k_fold),
+                            filename="{epoch}-{val_loss:.2f}-{val_f1:.2f}-{val_acc:.2f}",
+                            save_last=True,
+                            verbose=False)]
+
+
+def create_logger(cfg, group_id, k_fold=None):
+    return WandbLogger(project=get_env_variable("WANDB_PROJECT"),
+                       entity=get_env_variable("WANDB_ENTITY"),
+                       group=group_id,
+                       save_dir=get_output_dir_path(cfg, k_fold),
+                       log_model="all")
+
+
+def seed_everything(seed):
+    if seed:
+        L.seed_everything(seed, workers=True)
+
+
+def manage_k_folds(cfg):
+    k_folds = cfg.partitioning.get("k_folds")
+    if k_folds is None or k_folds == 1:
+        return [None]
+    return range(k_folds)
+
+
+def log_hyperparameters(cfg, model, trainer):
     hparams = {}
 
-    cfg = OmegaConf.to_container(object_dict["cfg"])
-    model = object_dict["model"]
-    trainer = object_dict["trainer"]
+    cfg = OmegaConf.to_container(cfg)
 
     if not trainer.logger:
         log.warning("Logger not found! Skipping hyperparameter logging...")
@@ -51,71 +106,48 @@ def log_hyperparameters(object_dict):
         logger.log_hyperparams(hparams)
 
 
-def create_logger(cfg, group_id):
-    return WandbLogger(project=get_env_variable("WANDB_PROJECT"),
-                       entity=get_env_variable("WANDB_ENTITY"),
-                       group=group_id,
-                       save_dir=cfg.paths.output_dir,
-                       log_model=True)
-
-
-def create_callbacks(cfg):
-    return [ModelCheckpoint(monitor="val_f1",
-                            mode="max",
-                            dirpath=cfg.get("ckpt_path"),
-                            save_last=True,
-                            verbose=False)]
-
-
-def seed_everything(seed):
-    if seed:
-        L.seed_everything(seed, workers=True)
-
-
 @hydra.main(version_base="1.3", config_path="../configs", config_name="train.yaml")
 def train(cfg):
     seed_everything(cfg.get("seed"))
-
     print(OmegaConf.to_yaml(cfg))
 
-    k_folds = cfg.partitioning.get("k_folds", None)
-    if k_folds:
-        log.warning("Cross-validation is not supported yet and will be ignored.")
-        k_folds = None
+    uses_k_folds = cfg.partitioning.get("k_folds") is not None and cfg.partitioning.get("k_folds") > 1
+    group_id = wandb.util.generate_id() if uses_k_folds else None
+    if uses_k_folds:
+        log.info(f"Training {cfg.partitioning.get('k_folds')} folds")
+        log.info(f"CV Wandb Group ID: {group_id}")
 
-    datamodule = hydra.utils.instantiate(cfg.data,
-                                         k_folds=k_folds,
-                                         partitioned_data_dir=cfg.paths.partitioned_data_dir)
-    datamodule.setup(stage='fit')
+        if cfg.ckpt_path is not None:
+            raise ValueError("Checkpointing is not supported with k-folds")
 
-    model = hydra.utils.instantiate(cfg.model)
+    for fold_index in manage_k_folds(cfg):
+        run_name = f"{group_id}_fold_{fold_index + 1}" if uses_k_folds else None
+        with wandb.init(project=get_env_variable("WANDB_PROJECT"),
+                        group=group_id,
+                        name=run_name):
+            k_fold = fold_index + 1 if uses_k_folds else None
 
-    callbacks = create_callbacks(cfg)
-    logger = create_logger(cfg, group_id=None)
+            datamodule = instantiate_datamodule(cfg, fold_index)
+            datamodule.setup(stage='fit')
 
-    trainer = hydra.utils.instantiate(
-        cfg.trainer,
-        logger=logger,
-        callbacks=callbacks,
-        _convert_="partial"
-    )
+            model = hydra.utils.instantiate(cfg.model)
+            logger = create_logger(cfg, group_id, k_fold)
+            callbacks = create_callbacks(cfg, k_fold)
+            trainer = instantiate_trainer(cfg, logger, callbacks, k_fold)
 
-    log_hyperparameters({
-        "cfg": cfg,
-        "model": model,
-        "trainer": trainer,
-        "datamodule": datamodule,
-        "partitioning": cfg.partitioning,
-    })
+            log_hyperparameters(cfg, model, trainer)
 
-    train_dataloader, val_dataloader = datamodule.train_dataloader(), datamodule.val_dataloader()
+            train_dataloader, val_dataloader = datamodule.train_dataloader(), datamodule.val_dataloader()
+            trainer.fit(model, train_dataloader, val_dataloader, ckpt_path=cfg.get("ckpt_path"))
 
-    if cfg.get("ckpt_path"):
-        log.info(f"Training will be resumed from checkpoint at: {cfg.get('ckpt_path')}")
+            if fold_index is not None:
+                log.info(f"Training complete for {'fold ' + str(fold_index + 1)}")
 
-    trainer.fit(model, train_dataloader, val_dataloader, ckpt_path=cfg.get("ckpt_path"))
+            gc.collect()
+            torch.cuda.empty_cache()
 
-    log.info("Training complete!")
+    log.info("Training complete")
+
 
 if __name__ == "__main__":
     train()
