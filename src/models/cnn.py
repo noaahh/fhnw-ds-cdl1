@@ -1,9 +1,9 @@
-import pytorch_lightning as pl
+import lightning as L
 import torch
 import torch.nn as nn
 import torch.nn.functional as F
 
-class Simple1DCNN(pl.LightningModule):
+class Simple1DCNN(L.LightningModule):
     def __init__(self, input_length, input_channels, num_classes, learning_rate=1e-3):
         super(Simple1DCNN, self).__init__()
         self.save_hyperparameters()
