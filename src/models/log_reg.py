@@ -10,6 +10,7 @@ from src.data.dataset import NUM_CLASSES
 class MulticlassLogisticRegression(LightningModule):
     def __init__(self, input_dim, num_classes=NUM_CLASSES):
         super(MulticlassLogisticRegression, self).__init__()
+        self.save_hyperparameters()
         self.input_dim = input_dim
         self.linear = nn.Linear(input_dim, num_classes)
         self.accuracy = Accuracy(task='multiclass', num_classes=num_classes)
@@ -42,3 +43,8 @@ class MulticlassLogisticRegression(LightningModule):
     def validation_step(self, batch, batch_idx):
         loss, acc, f1 = self._shared_step(batch, batch_idx)
         self.log_dict({"val_loss": loss, "val_acc": acc, "val_f1": f1}, prog_bar=True)
+
+    def predict_step(self, batch, batch_idx, dataloader_idx=None):
+        x, _ = batch
+        preds = self(x)
+        return torch.argmax(preds, dim=1)

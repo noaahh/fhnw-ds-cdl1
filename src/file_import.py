@@ -185,6 +185,19 @@ def import_data(run_periodically: bool = typer.Option(False, help="Enable period
     logger.info("Done!")
 
 
+def import_file_data(file_path: str):
+    if not os.path.exists(file_path):
+        raise FileNotFoundError(f"File not found: {file_path}")
+
+    if not os.path.isfile(file_path):
+        raise ValueError("Only single file processing is supported at this time.")
+
+    measurement_file = MeasurementFile(file_path)
+    sensor_data = measurement_file.get_sensor_data()
+
+    return sensor_data
+
+
 def main():
     app()
 
