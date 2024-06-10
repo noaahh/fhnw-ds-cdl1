@@ -6,19 +6,8 @@ import torch
 from lightning import LightningDataModule
 from torch.utils.data import Dataset, DataLoader
 
+from src.data.label_mapping import LABEL_MAPPING, NUM_CLASSES, LABEL_COLUMN
 from src.utils import get_partitioned_data, get_partition_paths
-
-LABEL_MAPPING = {
-    "walking": 0,
-    "running": 1,
-    "sitting": 2,
-    "standing": 3,
-    "climbing": 4
-}
-
-LABEL_COLUMN = 'label'
-
-NUM_CLASSES = len(LABEL_MAPPING)
 
 ONE_HOT_VECTORS = {
     label: torch.nn.functional.one_hot(
@@ -82,7 +71,7 @@ class SensorDatasetTorch(Dataset):
         return data_tensors
 
 
-def create_data_loader(data_df, batch_size, shuffle=True, num_workers=-1, pin_memory=False, persistent_workers=True):
+def create_data_loader(data_df, batch_size, shuffle=True, num_workers=0, pin_memory=False, persistent_workers=True):
     return DataLoader(SensorDatasetTorch(data_df),
                       batch_size=batch_size,
                       shuffle=shuffle,
@@ -92,14 +81,20 @@ def create_data_loader(data_df, batch_size, shuffle=True, num_workers=-1, pin_me
 
 
 class SensorDataModule(LightningDataModule):
-    def __init__(self, batch_size, partitioned_data_dir, k_folds, num_workers=os.cpu_count(), pin_memory=True):
+    def __init__(self, batch_size, partitioned_data_dir,
+                 k_folds,
+                 num_workers=os.cpu_count(),
+                 pin_memory=True):
         super().__init__()
         self.current_fold = None
         self.train_data = None
         self.val_data = None
-        self.k_folds = None  # Currently not supported
 
-        self.partition_paths = get_partition_paths(partitioned_data_dir)
+        self.k_folds = k_folds
+        if self.k_folds is not None and self.k_folds <= 1:
+            raise ValueError("Invalid number of folds. Must be greater than 1.")
+
+        self.partition_paths = get_partition_paths(partitioned_data_dir, k_folds=k_folds)
         self.batch_size = batch_size
         self.num_workers = os.cpu_count() if num_workers is None else num_workers
         self.pin_memory = pin_memory

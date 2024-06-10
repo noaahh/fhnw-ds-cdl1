@@ -32,4 +32,11 @@ clean:
 	rm -rf $(CONDA_ENV_NAME)/*
 	rm -rf data/cache/*
 
-.PHONY: setup import-latest run-experiment teardown-influxdb stop-influxdb clean
+run-dashboard:
+	streamlit run src/dashboard.py                                                                                                                                      INT 8m 19s py cdl1 23:20:34
+
+run-api:
+	fastapi run src/predict_api.py
+
+
+.PHONY: setup import-latest run-experiment teardown-influxdb stop-influxdb clean run-dashboard run-api

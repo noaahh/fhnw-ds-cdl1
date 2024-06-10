@@ -1,6 +1,7 @@
 import torch
 from lightning import LightningModule
 from torch import nn
+import torch.nn.functional as F
 from torchmetrics import Accuracy, F1Score
 
 from src.data.dataset import NUM_CLASSES
@@ -9,10 +10,11 @@ from src.data.dataset import NUM_CLASSES
 class MulticlassLogisticRegression(LightningModule):
     def __init__(self, input_dim, num_classes=NUM_CLASSES):
         super(MulticlassLogisticRegression, self).__init__()
+        self.save_hyperparameters()
         self.input_dim = input_dim
         self.linear = nn.Linear(input_dim, num_classes)
-        self.accuracy = Accuracy(num_classes=num_classes, task='multiclass')
-        self.f1 = F1Score(num_classes=num_classes, task='multiclass')
+        self.accuracy = Accuracy(task='multiclass', num_classes=num_classes)
+        self.f1 = F1Score(num_classes=num_classes, average='weighted', task='multiclass')
 
     def forward(self, x):
         x = x.view(x.size(0), -1)
@@ -23,37 +25,26 @@ class MulticlassLogisticRegression(LightningModule):
     def configure_optimizers(self):
         return torch.optim.SGD(self.parameters(), lr=0.01)
 
-    def training_step(self, batch, batch_idx):
+    def _shared_step(self, batch, batch_idx):
         x, y = batch
-        y_hat = self(x)
-        y = y.argmax(dim=1)
-        loss = nn.CrossEntropyLoss()(y_hat, y)
-        acc = self.accuracy(y_hat.argmax(dim=1), y)
-        f1 = self.f1(y_hat.argmax(dim=1), y)
-        self.log('train_loss', loss, on_step=True, on_epoch=True, prog_bar=True)
-        self.log('train_acc', acc, on_step=True, on_epoch=True, prog_bar=True)
-        self.log('train_f1', f1, on_step=True, on_epoch=True, prog_bar=True)
+        logits = self(x)
+        preds = torch.argmax(logits, dim=1)
+        y = torch.argmax(y, dim=1)
+        loss = F.cross_entropy(logits, y)
+        acc = self.accuracy(preds, y)
+        f1 = self.f1(preds, y)
+        return loss, acc, f1
+
+    def training_step(self, batch, batch_idx):
+        loss, acc, f1 = self._shared_step(batch, batch_idx)
+        self.log_dict({"train_loss": loss, "train_acc": acc, "train_f1": f1}, prog_bar=True)
         return loss
 
     def validation_step(self, batch, batch_idx):
-        x, y = batch
-        y_hat = self(x)
-        y = y.argmax(dim=1)
-        loss = nn.CrossEntropyLoss()(y_hat, y)
-        acc = self.accuracy(y_hat.argmax(dim=1), y)
-        f1 = self.f1(y_hat.argmax(dim=1), y)
-        self.log('val_loss', loss, on_step=True, on_epoch=True, prog_bar=True)
-        self.log('val_acc', acc, on_step=True, on_epoch=True, prog_bar=True)
-        self.log('val_f1', f1, on_step=True, on_epoch=True, prog_bar=True)
-        return loss
+        loss, acc, f1 = self._shared_step(batch, batch_idx)
+        self.log_dict({"val_loss": loss, "val_acc": acc, "val_f1": f1}, prog_bar=True)
 
-    def test_step(self, batch, batch_idx):
-        x, y = batch
-        y_hat = self(x)
-        loss = nn.CrossEntropyLoss()(y_hat, y)
-        acc = self.accuracy(y_hat.argmax(dim=1), y)
-        f1 = self.f1(y_hat.argmax(dim=1), y)
-        self.log('test_loss', loss, on_step=True, on_epoch=True, prog_bar=True)
-        self.log('test_acc', acc, on_step=True, on_epoch=True, prog_bar=True)
-        self.log('test_f1', f1, on_step=True, on_epoch=True, prog_bar=True)
-        return loss
+    def predict_step(self, batch, batch_idx, dataloader_idx=None):
+        x, _ = batch
+        preds = self(x)
+        return torch.argmax(preds, dim=1)
