@@ -6,19 +6,8 @@ import torch
 from lightning import LightningDataModule
 from torch.utils.data import Dataset, DataLoader
 
+from src.data.label_mapping import LABEL_MAPPING, NUM_CLASSES, LABEL_COLUMN
 from src.utils import get_partitioned_data, get_partition_paths
-
-LABEL_MAPPING = {
-    "walking": 0,
-    "running": 1,
-    "sitting": 2,
-    "standing": 3,
-    "climbing": 4
-}
-
-LABEL_COLUMN = 'label'
-
-NUM_CLASSES = len(LABEL_MAPPING)
 
 ONE_HOT_VECTORS = {
     label: torch.nn.functional.one_hot(
@@ -82,7 +71,7 @@ class SensorDatasetTorch(Dataset):
         return data_tensors
 
 
-def create_data_loader(data_df, batch_size, shuffle=True, num_workers=-1, pin_memory=False, persistent_workers=True):
+def create_data_loader(data_df, batch_size, shuffle=True, num_workers=0, pin_memory=False, persistent_workers=True):
     return DataLoader(SensorDatasetTorch(data_df),
                       batch_size=batch_size,
                       shuffle=shuffle,

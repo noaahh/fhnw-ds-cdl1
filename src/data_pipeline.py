@@ -3,6 +3,8 @@ import logging
 import math
 import os
 import shutil
+import tempfile
+import zipfile
 
 import hydra
 import pandas as pd
@@ -127,7 +129,8 @@ def smooth_signal(segment, cfg):
         if smoothing_type == 'butterworth':
             order = cfg.preprocessing.smoothing.order
             cutoff = cfg.preprocessing.smoothing.cutoff
-            segment[column] = apply_butterworth_filter(segment[column], order, cutoff, cfg.preprocessing.resample_rate_hz)
+            segment[column] = apply_butterworth_filter(segment[column], order, cutoff,
+                                                       cfg.preprocessing.resample_rate_hz)
         elif smoothing_type == 'wavelet':
             wavelet = cfg.preprocessing.smoothing.wavelet
             level = cfg.preprocessing.smoothing.level
