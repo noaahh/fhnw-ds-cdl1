@@ -16,6 +16,17 @@ class Labels(Enum):
     CLIMBING = "climbing"
 
 
+LABEL_MAPPING = {
+    "walking": 0,
+    "running": 1,
+    "sitting": 2,
+    "standing": 3,
+    "climbing": 4
+}
+
+LABEL_COLUMN = 'label'
+NUM_CLASSES = len(LABEL_MAPPING)
+
 MAPPING = {
     "_laufen": Labels.WALKING,
     "treppe": Labels.CLIMBING,
