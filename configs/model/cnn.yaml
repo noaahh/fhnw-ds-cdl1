@@ -1,0 +1,10 @@
+_target_: src.models.cnn.Simple1DCNN
+input_length: 251
+input_channels: 16
+num_classes: 5
+
+optimizer:
+  _target_: torch.optim.Adam
+  _partial_: true
+  lr: 0.001
+  weight_decay: 0.0
