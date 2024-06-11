@@ -1,0 +1,15 @@
+_target_: src.models.transformer.TransformerClassifier
+
+input_dim: 16
+d_model: 128
+nhead: 8
+num_encoder_layers: 6
+dim_feedforward: 512
+num_classes: 5
+dropout: 0.1
+
+optimizer:
+  _target_: torch.optim.Adam
+  _partial_: true
+  lr: 0.001
+  weight_decay: 0.0

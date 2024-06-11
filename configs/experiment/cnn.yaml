@@ -1,13 +1,9 @@
 # @package _global_
 
 defaults:
-  - override /model: log_reg
+  - override /model: cnn
   - override /trainer: mps
   - override /partitioning: default
-
-partitioning:
-  k_folds: 5
-  stratify: False
 
 trainer:
   max_epochs: 30
