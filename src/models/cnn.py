@@ -6,7 +6,7 @@ import torch.nn.functional as F
 
 
 class Simple1DCNN(LightningModule):
-    def __init__(self, input_length, input_channels, num_classes, learning_rate=1e-3):
+    def __init__(self, optimizer, input_length, input_channels, num_classes):
         super().__init__()
         self.save_hyperparameters()
 
@@ -25,6 +25,9 @@ class Simple1DCNN(LightningModule):
         self.f1_score = F1Score(num_classes=num_classes, average='weighted', task='multiclass')
 
     def forward(self, x):
+        # switch from (batch, channels, length) to (batch, length, channels)
+        x = x.permute(0, 2, 1)
+
         x = self.pool(F.relu(self.conv1(x)))
         x = self.pool(F.relu(self.conv2(x)))
         x = self.pool(F.relu(self.conv3(x)))
@@ -38,8 +41,9 @@ class Simple1DCNN(LightningModule):
     def _shared_step(self, batch, batch_idx):
         x, y = batch
         logits = self(x)
-        loss = F.cross_entropy(logits, y)
         preds = torch.argmax(logits, dim=1)
+        y = torch.argmax(y, dim=1)
+        loss = F.cross_entropy(logits, y)
         acc = self.accuracy(preds, y)
         f1 = self.f1_score(preds, y)
         return loss, acc, f1
@@ -60,4 +64,4 @@ class Simple1DCNN(LightningModule):
         return preds
 
     def configure_optimizers(self):
-        return torch.optim.Adam(self.parameters(), lr=self.hparams.learning_rate)
+        return self.hparams.optimizer(params=self.trainer.model.parameters())
