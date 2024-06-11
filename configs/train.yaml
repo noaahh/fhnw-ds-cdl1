@@ -9,5 +9,6 @@ defaults:
 
   - experiment: null
 
+refit_on_all_data: False
 ckpt_path: null
 seed: 1337

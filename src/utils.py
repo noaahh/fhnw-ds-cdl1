@@ -19,55 +19,45 @@ def get_env_variable(variable_name):
     return value
 
 
-PARTITION_PATHS_KEYS = ['train', 'validate']
-
-
 def get_partition_paths(root_partition_dir, k_folds=None):
-    partition_paths = []
-    test_path = os.path.join(root_partition_dir, 'test.parquet')
-
+    paths = {}
     if k_folds is not None:
-        for i in range(k_folds):
-            fold_dir = os.path.join(root_partition_dir, f'fold_{i}')
-
-            partition_paths.append({
-                'train': os.path.join(fold_dir, 'train.parquet'),
-                'validate': os.path.join(fold_dir, 'val.parquet'),
-                'test': test_path
+        folds = []
+        for fold in range(k_folds):
+            folds.append({
+                'base_dir': os.path.join(root_partition_dir, f"fold_{fold}"),
+                'train': os.path.join(root_partition_dir, f"fold_{fold}", 'train.parquet'),
+                'validate': os.path.join(root_partition_dir, f"fold_{fold}", 'validate.parquet')
             })
+        paths['folds'] = folds
     else:
-        partition_paths = {
-            'train': os.path.join(root_partition_dir, 'train.parquet'),
-            'validate': os.path.join(root_partition_dir, 'val.parquet'),
-            'test': test_path
-        }
+        paths['train'] = os.path.join(root_partition_dir, 'train.parquet')
+        paths['validate'] = os.path.join(root_partition_dir, 'validate.parquet')
 
-    return partition_paths
+    paths['test'] = os.path.join(root_partition_dir, 'test.parquet')
+    paths['train_all'] = os.path.join(root_partition_dir, 'train_all.parquet')
+    return paths
 
 
 def get_partitioned_data(partition_paths):
-    if isinstance(partition_paths, dict):
-        assert all([key in partition_paths for key in PARTITION_PATHS_KEYS]), "Missing keys in partition paths."
-        return {key: pd.read_parquet(path) for key, path in partition_paths.items()}
-    elif isinstance(partition_paths, list):
-        folds = []
-        for fold in partition_paths:
-            assert all([key in fold for key in PARTITION_PATHS_KEYS]), "Missing keys in partition paths."
-            folds.append({key: pd.read_parquet(path) for key, path in fold.items()})
-        return folds
+    data_structure = {}
+    if 'folds' in partition_paths:
+        data_structure['folds'] = []
+        for fold in partition_paths['folds']:
+            loaded_fold = {
+                'base_dir': fold['base_dir'],
+                'train': pd.read_parquet(fold['train']) if os.path.exists(fold['train']) else None,
+                'validate': pd.read_parquet(fold['validate']) if os.path.exists(fold['validate']) else None
+            }
+            data_structure['folds'].append(loaded_fold)
     else:
-        raise ValueError("Invalid partition paths format.")
+        for key in ['train', 'validate']:
+            data_structure[key] = pd.read_parquet(partition_paths[key]) if os.path.exists(partition_paths[key]) else None
 
+    for key in ['test', 'train_all']:
+        data_structure[key] = pd.read_parquet(partition_paths[key]) if os.path.exists(partition_paths[key]) else None
 
-def setup_logging():
-    logging.basicConfig(
-        level=logging.INFO,
-        format="%(asctime)s [%(levelname)s] %(message)s",
-        handlers=[
-            logging.StreamHandler()
-        ]
-    )
-    return logging.getLogger(__name__)
+    return data_structure
 
 
 def validate_smoothing(value: str):

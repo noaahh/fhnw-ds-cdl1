@@ -81,79 +81,67 @@ def create_data_loader(data_df, batch_size, shuffle=True, num_workers=0, pin_mem
 
 
 class SensorDataModule(LightningDataModule):
-    def __init__(self, batch_size, partitioned_data_dir,
-                 k_folds,
-                 num_workers=os.cpu_count(),
-                 pin_memory=True):
+    def __init__(self, batch_size, partitioned_data_dir, k_folds=None,
+                 num_workers=None, pin_memory=True, use_persistent_workers=True):
         super().__init__()
         self.current_fold = None
         self.train_data = None
         self.val_data = None
+        self.test_data = None
 
         self.k_folds = k_folds
-        if self.k_folds is not None and self.k_folds <= 1:
-            raise ValueError("Invalid number of folds. Must be greater than 1.")
-
-        self.partition_paths = get_partition_paths(partitioned_data_dir, k_folds=k_folds)
+        self.partition_paths = get_partition_paths(partitioned_data_dir, k_folds)
         self.batch_size = batch_size
-        self.num_workers = os.cpu_count() if num_workers is None else num_workers
+        self.num_workers = num_workers if num_workers is not None else os.cpu_count()
         self.pin_memory = pin_memory
-
-    @property
-    def num_classes(self):
-        return NUM_CLASSES
+        self.use_persistent_workers = use_persistent_workers
 
     def setup(self, stage=None):
-        partitioned_data_list = get_partitioned_data(self.partition_paths)
+        self.train_data = None
+        self.val_data = None
+        self.test_data = None
 
-        if self.k_folds:
-            # Cross-validation setup
-            if self.current_fold is None:
-                raise ValueError("Current fold is not set. Please set the fold before calling setup.")
+        data_list = get_partitioned_data(self.partition_paths)
+        if stage == 'refit':
+            self.train_data = data_list['train_all']
+            self.test_data = data_list['test']
+            return
 
-            if isinstance(partitioned_data_list, list):
-                partition = partitioned_data_list[self.current_fold]
-            else:
-                raise ValueError("Partitioned data is not in expected format (list or dict).")
+        if stage == 'test':
+            self.test_data = data_list['test'] if self.k_folds is None else data_list[0]['test']
+            return
 
-        else:
-            # Single partition setup (no cross-validation)
-            if isinstance(partitioned_data_list, dict):
-                partition = partitioned_data_list
-            else:
-                raise ValueError("Partitioned data is not in expected format or contains multiple partitions.")
+        if self.current_fold is None and self.k_folds:
+            raise ValueError("Current fold is not set for cross-validation. Please set the fold before setup.")
 
-        self.train_data = partition['train']
-        self.val_data = partition['validate']
+        partition = data_list if self.k_folds is None \
+            else data_list["folds"][self.current_fold]
+
+        self.train_data = partition.get('train')
+        self.val_data = partition.get('validate')
 
     def set_current_fold(self, fold):
         if self.k_folds is None:
-            raise ValueError("Cross-validation is not enabled. Set k_folds to enable cross-validation.")
-
+            raise ValueError("Cross-validation is not enabled. Set k_folds to enable it.")
         if fold < 0 or fold >= self.k_folds:
             raise ValueError(f"Invalid fold index {fold}. Must be in range [0, {self.k_folds}).")
-
         self.current_fold = fold
 
-    def train_dataloader(self):
-        if self.train_data is None:
-            raise ValueError("Train data is not loaded. Call setup before accessing the dataloader.")
+    def _create_dataloader(self, data, shuffle, persistent_workers=False):
+        if data is None:
+            raise ValueError("Data is not loaded. Call setup before creating a dataloader.")
+        return DataLoader(SensorDatasetTorch(data),
+                          batch_size=self.batch_size,
+                          shuffle=shuffle,
+                          num_workers=self.num_workers,
+                          persistent_workers=persistent_workers,
+                          pin_memory=self.pin_memory)
 
-        return create_data_loader(self.train_data,
-                                  self.batch_size,
-                                  shuffle=True,
-                                  num_workers=self.num_workers,
-                                  pin_memory=self.pin_memory)
+    def train_dataloader(self):
+        return self._create_dataloader(self.train_data, shuffle=True)
 
     def val_dataloader(self):
-        if self.val_data is None:
-            raise ValueError("Validation data is not loaded. Call setup before accessing the dataloader.")
-
-        return create_data_loader(self.val_data,
-                                  self.batch_size,
-                                  shuffle=False,
-                                  num_workers=self.num_workers,
-                                  pin_memory=self.pin_memory)
+        return self._create_dataloader(self.val_data, shuffle=False, persistent_workers=self.use_persistent_workers)
 
     def test_dataloader(self):
-        raise NotImplementedError("Test data loader not implemented.")
+        return self._create_dataloader(self.test_data, shuffle=False, persistent_workers=self.use_persistent_workers)

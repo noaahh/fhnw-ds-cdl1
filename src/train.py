@@ -1,3 +1,4 @@
+import logging
 import os
 
 import hydra
@@ -13,7 +14,19 @@ import rootutils
 
 rootutils.setup_root(__file__, indicator=".project-root", pythonpath=True)
 
-from src.utils import get_env_variable, setup_logging
+from src.utils import get_env_variable
+
+
+def setup_logging():
+    logging.basicConfig(
+        level=logging.INFO,
+        format="%(asctime)s [%(levelname)s] %(message)s",
+        handlers=[
+            logging.StreamHandler()
+        ]
+    )
+    return logging.getLogger(__name__)
+
 
 log = setup_logging()
 
@@ -66,7 +79,7 @@ def seed_everything(seed):
 
 def manage_k_folds(cfg):
     k_folds = cfg.partitioning.get("k_folds")
-    if k_folds is None or k_folds == 1:
+    if k_folds is None or not k_folds or  k_folds == 1:
         return [None]
     return range(k_folds)
 
@@ -112,23 +125,35 @@ def train(cfg):
     print(OmegaConf.to_yaml(cfg))
 
     uses_k_folds = cfg.partitioning.get("k_folds") is not None and cfg.partitioning.get("k_folds") > 1
+    refit_on_all_data = cfg.get("refit_on_all_data", False)
+    if refit_on_all_data and uses_k_folds:
+        log.warning("Refit on all data is enabled. Ignoring k-folds.")
+        uses_k_folds = False
+
     group_id = wandb.util.generate_id() if uses_k_folds else None
     if uses_k_folds:
         log.info(f"Training {cfg.partitioning.get('k_folds')} folds")
         log.info(f"CV Wandb Group ID: {group_id}")
-
         if cfg.ckpt_path is not None:
             raise ValueError("Checkpointing is not supported with k-folds")
 
+    wandb_tags = []
+    if refit_on_all_data:
+        wandb_tags.append("refit_on_all_data")
+    if uses_k_folds:
+        wandb_tags.append("k_fold")
+
     for fold_index in manage_k_folds(cfg):
         run_name = f"{group_id}_fold_{fold_index + 1}" if uses_k_folds else None
-        with wandb.init(project=get_env_variable("WANDB_PROJECT"),
-                        group=group_id,
-                        name=run_name):
-            k_fold = fold_index + 1 if uses_k_folds else None
+        k_fold = fold_index + 1 if uses_k_folds else None
 
+        with (wandb.init(project=get_env_variable("WANDB_PROJECT"),
+                         group=group_id,
+                         tags=wandb_tags,
+                         name=run_name)):
             datamodule = instantiate_datamodule(cfg, fold_index)
-            datamodule.setup(stage='fit')
+            stage = 'refit' if refit_on_all_data else 'fit'
+            datamodule.setup(stage)
 
             model = hydra.utils.instantiate(cfg.model)
             logger = create_logger(cfg, group_id, k_fold)
@@ -137,7 +162,8 @@ def train(cfg):
 
             log_hyperparameters(cfg, model, trainer)
 
-            train_dataloader, val_dataloader = datamodule.train_dataloader(), datamodule.val_dataloader()
+            train_dataloader = datamodule.train_dataloader()
+            val_dataloader = datamodule.val_dataloader() if not refit_on_all_data else datamodule.test_dataloader()
             trainer.fit(model, train_dataloader, val_dataloader, ckpt_path=cfg.get("ckpt_path"))
 
             if fold_index is not None:

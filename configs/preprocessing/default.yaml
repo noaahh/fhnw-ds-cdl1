@@ -20,6 +20,3 @@ smoothing:
 
 scaling:
   type: standard
-
-pca:
-  components: null
