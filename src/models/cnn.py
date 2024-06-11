@@ -6,7 +6,7 @@ import torch.nn.functional as F
 
 
 class Simple1DCNN(LightningModule):
-    def __init__(self, optimizer, input_length, input_channels, num_classes):
+    def __init__(self, optimizer, input_channels, num_classes):
         super().__init__()
         self.save_hyperparameters()
 
@@ -14,18 +14,15 @@ class Simple1DCNN(LightningModule):
         self.conv2 = nn.Conv1d(16, 32, kernel_size=3, stride=1, padding=1)
         self.conv3 = nn.Conv1d(32, 64, kernel_size=3, stride=1, padding=1)
 
-        self.pool = nn.MaxPool1d(kernel_size=2, stride=2, padding=0)
-
-        self.fc1 = nn.Linear(64 * (input_length // 8), 128)
+        self.pool = nn.AdaptiveMaxPool1d(1)
+        self.fc1 = nn.Linear(64, 128)
         self.fc2 = nn.Linear(128, num_classes)
 
         self.dropout = nn.Dropout(0.5)
-
         self.accuracy = Accuracy(task='multiclass', num_classes=num_classes)
         self.f1_score = F1Score(num_classes=num_classes, average='weighted', task='multiclass')
 
     def forward(self, x):
-        # switch from (batch, channels, length) to (batch, length, channels)
         x = x.permute(0, 2, 1)
 
         x = self.pool(F.relu(self.conv1(x)))

@@ -3,8 +3,6 @@ import logging
 import math
 import os
 import shutil
-import tempfile
-import zipfile
 
 import hydra
 import pandas as pd
@@ -12,7 +10,6 @@ import rootutils
 from dotenv import load_dotenv
 from joblib import Parallel, delayed
 from omegaconf import OmegaConf
-from sklearn.decomposition import PCA
 from sklearn.model_selection import train_test_split, StratifiedKFold, KFold
 from sklearn.preprocessing import StandardScaler, MinMaxScaler, RobustScaler
 from tqdm import tqdm
@@ -249,6 +246,11 @@ def extract_features(df: pd.DataFrame, cfg: dict) -> pd.DataFrame:
     source_cols = df.select_dtypes(include=['float64']).columns
     len_before_extraction = len(df)
 
+    if (not cfg.preprocessing.feature_extraction.get("use_fft", None)
+            and not cfg.preprocessing.feature_extraction.get("use_pears_corr", None)):
+        logger.info("No features enabled for extraction.")
+        return df
+
     n_jobs = cfg.get("n_jobs", None)
     if n_jobs:
         results = Parallel(n_jobs=n_jobs)(delayed(extract_segment_features)(
@@ -266,51 +268,51 @@ def extract_features(df: pd.DataFrame, cfg: dict) -> pd.DataFrame:
 
 
 def split_data(segments_df: pd.DataFrame, cfg: dict) -> tuple | list:
-    """Split data into train and validation sets or perform K-fold split."""
-    split_by = cfg.partitioning.split_by
-    val_size = cfg.partitioning.validation_size
-    k_folds = cfg.partitioning.k_folds
-    stratify = cfg.partitioning.stratify
+    split_by = cfg['partitioning']['split_by']
+    val_size = cfg['partitioning']['validation_size']
+    test_size = cfg['partitioning']['test_size']
+    k_folds = cfg['partitioning']['k_folds']
+    stratify = cfg['partitioning']['stratify']
 
     assert split_by in segments_df.columns, "Split column not found in the DataFrame."
 
-    logger.debug(
-        f"Segments label counts by {split_by}: {segments_df.groupby(split_by).first()['label'].value_counts()}")
+    grouped = segments_df.groupby(split_by).agg('first').reset_index()
+    grouped.set_index(split_by, inplace=True, drop=True)
 
-    logger.debug(
-        f"Segments label counts by {split_by} (%): {segments_df.groupby(split_by).first()['label'].value_counts(normalize=True)}")
+    assert grouped.index.nunique() == len(grouped), "Split column contains duplicate values."
 
-    grouped = segments_df.groupby(split_by).first().reset_index()
-    assert grouped[split_by].nunique() == len(grouped), "Split column contains duplicate values."
+    grouped_train, grouped_test = train_test_split(
+        grouped, test_size=test_size, stratify=grouped['label'] if stratify else None, shuffle=True,
+        random_state=cfg['seed']
+    )
+
+    test_mask = segments_df[split_by].isin(grouped_test.index)
+    test_set = segments_df[test_mask]
 
     if k_folds:
         folds = []
-
         if stratify:
-            kf = StratifiedKFold(n_splits=k_folds, shuffle=True, random_state=cfg.seed)
-            splits = kf.split(grouped, grouped['label'])
+            kf = StratifiedKFold(n_splits=k_folds, shuffle=True, random_state=cfg['seed'])
+            splits = kf.split(grouped_train, grouped_train['label'])
         else:
-            kf = KFold(n_splits=k_folds, shuffle=True, random_state=cfg.seed)
-            splits = kf.split(grouped)
+            kf = KFold(n_splits=k_folds, shuffle=True, random_state=cfg['seed'])
+            splits = kf.split(grouped_train)
 
         for train_idx, val_idx in splits:
-            train_ids = grouped.loc[train_idx, split_by]
-            val_ids = grouped.loc[val_idx, split_by]
-            train_mask = segments_df[split_by].isin(train_ids)
-            val_mask = segments_df[split_by].isin(val_ids)
+            train_mask = segments_df[split_by].isin(grouped_train.index[train_idx])
+            val_mask = segments_df[split_by].isin(grouped_train.index[val_idx])
             folds.append((segments_df[train_mask], segments_df[val_mask]))
 
-        return folds
+        return folds, test_set
     else:
-        train_idxs, val_idxs = train_test_split(grouped,
-                                                test_size=val_size,
-                                                stratify=grouped['label'] if stratify else None,
-                                                shuffle=True, random_state=cfg.seed)
-        train_ids = train_idxs[split_by]
-        val_ids = val_idxs[split_by]
-        train_mask = segments_df[split_by].isin(train_ids)
-        val_mask = segments_df[split_by].isin(val_ids)
-        return segments_df[train_mask], segments_df[val_mask]
+        train_idxs, val_idxs = train_test_split(
+            grouped_train, test_size=val_size, stratify=grouped_train['label'] if stratify else None, shuffle=True,
+            random_state=cfg['seed']
+        )
+
+        train_mask = segments_df[split_by].isin(train_idxs.index)
+        val_mask = segments_df[split_by].isin(val_idxs.index)
+        return segments_df[train_mask], segments_df[val_mask], test_set
 
 
 def get_scaler(scaler_type: str) -> object:
@@ -324,52 +326,69 @@ def get_scaler(scaler_type: str) -> object:
 
 
 def scale_data(train_data: pd.DataFrame,
-               val_data: pd.DataFrame,
+               val_data: pd.DataFrame | None,
+               test_data: pd.DataFrame | None,
                cfg: dict) -> tuple:
     """Apply scaling to the training and validation data."""
     scaler = get_scaler(cfg.preprocessing.scaling.type)
     float_columns = train_data.select_dtypes(include=['float64']).columns
     train_data.loc[:, float_columns] = scaler.fit_transform(train_data[float_columns])
-    val_data.loc[:, float_columns] = scaler.transform(val_data[float_columns])
-    return train_data, val_data
+    if val_data is not None:
+        val_data.loc[:, float_columns] = scaler.transform(val_data[float_columns])
+    if test_data is not None:
+        test_data.loc[:, float_columns] = scaler.transform(test_data[float_columns])
+    return train_data, val_data, test_data
 
 
-def transform_data(train_data: pd.DataFrame,
-                   val_data: pd.DataFrame,
-                   cfg: dict) -> tuple:
-    """Apply PCA to the training and validation data."""
-    if cfg.preprocessing.get("pca", None) and cfg.preprocessing.pca.get("components", None):
-        float_columns = train_data.select_dtypes(include=['float64']).columns
+def save_partitions(data_partitions, cfg):
+    partitioned_data_dir = cfg.paths.get("partitioned_data_dir")
+    if os.path.exists(partitioned_data_dir):
+        logger.info(f"Clearing existing partitioned data directory: {partitioned_data_dir}")
+        shutil.rmtree(partitioned_data_dir, ignore_errors=True)
+        os.makedirs(partitioned_data_dir, exist_ok=True)
 
-        X_train_pca = train_data[float_columns].copy().fillna(0)
-        X_val_pca = val_data[float_columns].copy().fillna(0)
+    paths = get_partition_paths(partitioned_data_dir, cfg.partitioning.get("k_folds"))
+    os.makedirs(paths.get('base_dir', '.'), exist_ok=True)
 
-        pca_components = cfg.preprocessing.pca.components
+    if 'folds' in data_partitions:
+        for i, (train_data, val_data) in enumerate(data_partitions['folds']):
+            paths_fold = paths['folds'][i]
+            os.makedirs(paths_fold['base_dir'], exist_ok=True)
+            train_data.to_parquet(paths_fold['train'])
+            val_data.to_parquet(paths_fold['validate'])
 
-        pca = PCA(n_components=pca_components)
-        X_train_pca = pca.fit_transform(X_train_pca)
-        X_val_pca = pca.transform(X_val_pca)
-        pca_columns = [f'pca_{i}' for i in range(pca_components)]
-        train_data = pd.concat([train_data, pd.DataFrame(X_train_pca, columns=pca_columns)], axis=1)
-        val_data = pd.concat([val_data, pd.DataFrame(X_val_pca, columns=pca_columns)], axis=1)
+    else:
+        train_data = data_partitions['train']
+        val_data = data_partitions['validate']
+        test_data = data_partitions['test']
 
-    return train_data, val_data
+        train_data.to_parquet(paths['train'])
+        val_data.to_parquet(paths['validate'])
+        test_data.to_parquet(paths['test'])
 
+    data_partitions['train_all'].to_parquet(paths['train_all'])
+    data_partitions['test'].to_parquet(paths['test'])
 
-def save_partitions(train_data: pd.DataFrame, val_data: pd.DataFrame, paths: dict) -> None:
-    """Save the training and validation data to disk."""
-    for path in paths.values():
-        os.makedirs(os.path.dirname(path), exist_ok=True)
+    for partition_name, partition_data in data_partitions.items():
+        if partition_name == "folds":
+            for i, (train_data, val_data) in enumerate(partition_data):
+                logger.debug(f"Label distribution in fold {i}:")
 
-    train_data.to_parquet(paths['train'])
-    val_data.to_parquet(paths['validate'])
+                logger.debug("Train:")
+                logger.debug(train_data['label'].value_counts(normalize=True))
 
+                logger.debug("Validate:")
+                logger.debug(val_data['label'].value_counts(normalize=True))
+        else:
+            label_distribution = partition_data['label'].value_counts(normalize=True)
+            logger.debug(f"Label distribution in {partition_name}:")
+            logger.debug(label_distribution)
 
-def scale_and_transform_data(train_data: pd.DataFrame, val_data: pd.DataFrame, cfg: dict) -> tuple:
-    """Process data by scaling and possibly transforming with PCA."""
-    train_data, val_data = scale_data(train_data, val_data, cfg)
-    train_data, val_data = transform_data(train_data, val_data, cfg)
-    return train_data, val_data
+        logger.debug(f"Partition size: {partition_name} - {len(partition_data)}")
+        logger.debug(f"Partition size in percentage: "
+                     f"{partition_name} - {len(partition_data) / len(data_partitions['train_all'])}")
+
+    logger.info("Data partitions saved successfully.")
 
 
 @hydra.main(version_base="1.3", config_path="../configs", config_name="pipeline.yaml")
@@ -377,12 +396,6 @@ def pipeline(cfg):
     print(OmegaConf.to_yaml(cfg))
 
     setup_logging(cfg.get("verbose", True))
-
-    if cfg.get("pca_components", None):
-        raise ValueError("PCA components not implemented yet.")
-
-    if not cfg.get("n_jobs", None):
-        logger.warning("Using single-threaded processing. This may take a while for more features.")
 
     measurement_file_path = cfg.get("measurement_file_path", None)
     if measurement_file_path:
@@ -402,35 +415,44 @@ def pipeline(cfg):
     segments_df = extract_features(segments_df, cfg)
 
     if measurement_file_path:
-        logger.info("Done.")
+        # Dirty hack as we don't have the scaling parameters for the single file prediction case
+        segments_df, _, _ = scale_data(segments_df, None, None, cfg)
+        logger.info("Done processing single measurement file.")
         return segments_df
 
-    partitioned_data_dir = cfg.paths.get("partitioned_data_dir")
-    if os.path.exists(partitioned_data_dir):
-        logger.info(f"Clearing existing partitioned data directory: {partitioned_data_dir}")
-        shutil.rmtree(partitioned_data_dir)
-        os.makedirs(partitioned_data_dir, exist_ok=True)
-
     logger.info("Splitting and processing data...")
-    k_folds = cfg.partitioning.get("k_folds", None)
-    if k_folds:
-        paths = get_partition_paths(partitioned_data_dir, k_folds=k_folds)
-        folds = split_data(segments_df, cfg)
+    if cfg.partitioning.get("k_folds") and cfg.partitioning.get("k_folds") > 1:
+        folds, test_data = split_data(segments_df, cfg)
 
+        folds_data = [{'train': None, 'validate': None} for _ in range(len(folds))]
         for i, (train_data, val_data) in enumerate(folds):
-            logger.debug(f"Fold {i + 1}: Train: {len(train_data)} ({len(train_data) / len(segments_df) * 100:.2f}%)"
-                         f" - Validate: {len(val_data)} ({len(val_data) / len(segments_df) * 100:.2f}%)")
+            train_data, val_data, _ = scale_data(train_data, val_data, None, cfg)
+            folds_data[i]['train'] = train_data
+            folds_data[i]['validate'] = val_data
 
-            train_data, val_data = scale_and_transform_data(train_data, val_data, cfg)
-            save_partitions(train_data, val_data, paths[i])
+        train_all = pd.concat([fd['validate'] for fd in folds_data], axis=0)
+        train_all, _, test_data = scale_data(train_all, None, test_data, cfg)
+        data_partitions = {
+            'folds': [(fd['train'], fd['validate']) for fd in folds_data],
+            'test': test_data,
+            'train_all': train_all
+        }
+
     else:
-        train_data, val_data = split_data(segments_df, cfg)
-        logger.debug(f"Train: {len(train_data)} ({len(train_data) / len(segments_df) * 100:.2f}%)"
-                     f" - Validate: {len(val_data)} ({len(val_data) / len(segments_df) * 100:.2f}%)")
+        train_data, val_data, test_data = split_data(segments_df, cfg)
+        train_data, val_data, _ = scale_data(train_data, val_data, None, cfg)
 
-        train_data, val_data = scale_and_transform_data(train_data, val_data, cfg)
-        save_partitions(train_data, val_data, get_partition_paths(partitioned_data_dir, k_folds=k_folds))
+        train_all = pd.concat([train_data, val_data], axis=0)
+        train_all, _, test_data = scale_data(train_all, None, test_data, cfg)
 
+        data_partitions = {
+            'train': train_data,
+            'validate': val_data,
+            'test': test_data,
+            'train_all': train_all
+        }
+
+    save_partitions(data_partitions, cfg)
     logger.info("Data preparation completed.")
 
 

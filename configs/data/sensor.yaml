@@ -4,3 +4,4 @@ batch_size: 128
 
 num_workers: null # null means using the number of CPU cores
 pin_memory: True
+use_persistent_workers: False
