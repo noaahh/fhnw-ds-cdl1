@@ -21,6 +21,9 @@ ifeq ($(RUN_PIPELINE),1)
 endif
 	python src/train.py experiment=$(EXPERIMENT_NAME)
 
+run-pipeline:
+	python $(DATA_PIPELINE) experiment=$(EXPERIMENT_NAME)
+
 teardown-influxdb:
 	docker-compose down influxdb --volumes --remove-orphans
 
