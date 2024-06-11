@@ -5,9 +5,5 @@ defaults:
   - override /trainer: mps
   - override /partitioning: default
 
-partitioning:
-  k_folds: null
-  stratify: False
-
 trainer:
   max_epochs: 30
