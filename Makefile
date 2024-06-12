@@ -1,5 +1,5 @@
 CONDA_ENV_NAME=cdl1
-IMPORT_DATA=src/import.py
+IMPORT_DATA=src/file_import.py
 
 setup:
 	conda create --name $(CONDA_ENV_NAME) python=3.11
@@ -22,7 +22,7 @@ clean:
 	rm -rf data/cache/*
 
 run-dashboard:
-	streamlit run src/dashboard.py                                                                                                                                      INT 8m 19s py cdl1 23:20:34
+	streamlit run src/dashboard.py
 
 run-api:
 	fastapi run src/predict_api.py

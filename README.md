@@ -8,6 +8,14 @@ Before you begin, ensure you have met the following requirements:
 * Docker and Docker Compose
 * Git
 
+## Installation
+
+Set up the Python environment with Conda:
+
+```bash
+make setup
+```
+
 ## Project Structure
 
 The repository is structured to support scalable data processing and machine learning model development, with a focus on
@@ -61,13 +69,11 @@ the `src/data/label_mapping.py` file.
 The zip files should be named according to the activity with an underscore-separated timestamp. The mapping of labels is
 also defined in the `src/data/label_mapping.py` file.
 
-## Installation
 
-Set up the Python environment with Conda:
+## Experiment Configuration
 
-```bash
-make setup
-```
+The project uses Hydra to manage configurations for data processing and model training. The configurations are stored in
+the `configs/` directory and can be composed and overridden to define different experiment setups.
 
 ## Usage
 
@@ -77,17 +83,18 @@ To import the latest data and set up necessary infrastructure services:
 make import-latest
 ```
 
-To run an experiment (you can specify whether to run the data pipeline):
+To run an experiment with a specific configuration on either the data pipeline or model training:
 
 ```bash
-make run-experiment EXPERIMENT_NAME=my_experiment RUN_PIPELINE=1
+python src/data_pipeline.py experiment=<experiment_name> [overrides]
 ```
 
-or without running the data pipeline:
+or 
 
 ```bash
-make run-experiment EXPERIMENT_NAME=my_experiment RUN_PIPELINE=0
+python src/train.py experiment=<experiment_name> [overrides]
 ```
+
 
 To clean up resources and remove temporary files:
 

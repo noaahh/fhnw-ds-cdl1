@@ -55,7 +55,7 @@ class Simple1DCNN(LightningModule):
         self.log_dict({"val_loss": loss, "val_acc": acc, "val_f1": f1}, prog_bar=True)
 
     def predict_step(self, batch, batch_idx, dataloader_idx=None):
-        x, y = batch
+        x, _ = batch
         logits = self(x)
         preds = torch.argmax(logits, dim=1)
         return preds
