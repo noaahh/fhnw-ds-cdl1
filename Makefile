@@ -18,7 +18,6 @@ stop-influxdb:
 
 clean:
 	rm -rf outputs/*
-	rm -rf $(CONDA_ENV_NAME)/*
 	rm -rf data/cache/*
 
 run-dashboard:
