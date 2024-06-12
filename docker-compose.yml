@@ -39,6 +39,16 @@ services:
     ports:
       - "8080:80"
 
+  streamlit_app:
+    build:
+        context: .
+        dockerfile: dockerfiles/Dockerfile.dashboard
+    restart: unless-stopped
+    command:
+      - streamlit run src/dashboard.py --server.port 8501 --server-address=0.0.0.0
+    ports:
+      - "8501:8501"
+
 volumes:
   influxdbv2:
   influxdb_config:
