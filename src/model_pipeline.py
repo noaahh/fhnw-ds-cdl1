@@ -1,5 +1,5 @@
 import logging
-import shutil
+import tempfile
 from pathlib import Path
 
 import rootutils
@@ -10,6 +10,9 @@ from lightning import LightningModule, Trainer
 
 rootutils.setup_root(__file__, indicator=".project-root", pythonpath=True)
 
+from src.models.cnn import Simple1DCNN
+from src.models.lstm import SimpleLSTM
+from src.models.transformer import TransformerClassifier
 from src.data.label_mapping import LABEL_MAPPING
 from src.models.deep_res_bidir_lstm import DeepResBidirLSTM
 from src.data.dataset import SensorDataModule
@@ -29,7 +32,10 @@ def setup_logging(verbose: bool):
 
 LIGHTNING_MODULES = {
     "MulticlassLogisticRegression": MulticlassLogisticRegression,
-    "DeepResBidirLSTM": DeepResBidirLSTM
+    "DeepResBidirLSTM": DeepResBidirLSTM,
+    "Transformer": TransformerClassifier,
+    "SimpleLSTM": SimpleLSTM,
+    "CNN": Simple1DCNN
 }
 
 
@@ -47,8 +53,11 @@ def load_model(model_name, local_checkpoint_path=None, wandb_artifact_path=None)
     elif wandb_artifact_path:
         api = wandb.Api()
         artifact = api.artifact(wandb_artifact_path)
-        artifact_dir = artifact.download()
-        checkpoint_path = Path(artifact_dir) / "model.ckpt"
+        with tempfile.TemporaryDirectory() as temp_dir:
+            artifact_dir = artifact.download(temp_dir)
+            checkpoint_path = Path(artifact_dir) / "model.ckpt"
+            model = model_class.load_from_checkpoint(checkpoint_path)
+            return model, Path(temp_dir)
     else:
         raise ValueError("Either a local checkpoint path or wandb run and checkpoint path must be provided.")
 
@@ -58,7 +67,7 @@ def load_model(model_name, local_checkpoint_path=None, wandb_artifact_path=None)
         logger.error(f"Error loading model: {e}")
         raise
 
-    return model, checkpoint_path
+    return model, Path(checkpoint_path).parent
 
 
 @torch.no_grad()
@@ -85,7 +94,7 @@ def predict_file(measurement_file_path: Path,
                                                      shuffle=False)
 
     trainer = Trainer()
-    model, ckpt_path = load_model(model_name, local_checkpoint_path, wandb_artifact_path)
+    model, ckpt_dir = load_model(model_name, local_checkpoint_path, wandb_artifact_path)
     predictions = trainer.predict(model, data_loader)
     predictions = torch.cat(predictions, dim=0).tolist()
 
@@ -95,10 +104,6 @@ def predict_file(measurement_file_path: Path,
 
     majority_label = max(set(predicted_labels), key=predicted_labels.count)
     logger.info(f"Majority label: {majority_label}")
-
-    if wandb_artifact_path:
-        shutil.rmtree(ckpt_path.parent)
-        logger.info("Cleaned up downloaded artifact directory.")
 
     logger.info("Model pipeline execution completed.")
 
