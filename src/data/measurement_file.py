@@ -105,7 +105,33 @@ class MeasurementFile:
                 except KeyError:
                     pass
 
+        if self.is_android_platform():
+            self.handle_android_data(data)
+
         return data
+
+    @staticmethod
+    def handle_android_data(data):
+        # https://github.com/tszheichoi/awesome-sensor-logger/blob/main/CROSSPLATFORM.md
+        # change sign of accelerometer values
+        accel_data = data.get('accelerometer')
+        accel_data['x'] = -accel_data['x']
+        accel_data['y'] = -accel_data['y']
+        accel_data['z'] = -accel_data['z']
+        # change sign of gravity values
+        gravity_data = data.get('gravity')
+        gravity_data['x'] = -gravity_data['x']
+        gravity_data['y'] = -gravity_data['y']
+        gravity_data['z'] = -gravity_data['z']
+        # change sign of orientation values. We cannot fully handle the orientation data as there is a difference
+        # in the definition of true north between iOS and Android
+        orientation_data = data.get('orientation')
+        orientation_data['yaw'] = -orientation_data['yaw']
+        orientation_data['pitch'] = -orientation_data['pitch']
+        data.update({'accelerometer': accel_data, 'gravity': gravity_data, 'orientation': orientation_data})
+
+    def is_android_platform(self):
+        return "android" in self.get_metadata()['platform'].lower()
 
     def generate_file_hash(self):
         if not self.data:
