@@ -2,7 +2,6 @@
 
 defaults:
   - override /model: deep_res_bidir_lstm
-  - override /partitioning: default
 
 trainer:
   gradient_clip_val: 15.0 # As described in https://arxiv.org/pdf/1708.08989

@@ -2,4 +2,3 @@
 
 defaults:
   - override /model: transformer
-  - override /partitioning: default

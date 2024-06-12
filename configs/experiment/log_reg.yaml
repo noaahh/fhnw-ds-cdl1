@@ -2,4 +2,3 @@
 
 defaults:
   - override /model: log_reg
-  - override /partitioning: default
