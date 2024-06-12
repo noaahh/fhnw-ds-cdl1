@@ -128,8 +128,8 @@ class xLSTM(LightningModule):
 
         Returns:
             Tuple[Tensor, Hidden]: Returns tensor of predicted logits of shape
-                (batch, seq_len, vocab_size) if batch_first=True or of shape
-                (seq_len, batch, vocab_size) if batch_first=False, and the
+                (batch, seq_len, features) if batch_first=True or of shape
+                (seq_len, batch, features) if batch_first=False, and the
                 updated hidden model states.
         '''
 
@@ -147,8 +147,7 @@ class xLSTM(LightningModule):
             out.append(inp)
 
         out = torch.stack(out, dim=1 if batch_first else 0)
-        out = self.head(out)
-        out = out[:, -1, :]
+        out = self.head(out[:, -1, :])
 
         return out, hid
 

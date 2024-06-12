@@ -4,9 +4,3 @@ defaults:
   - override /model: x_lstm
   - override /partitioning: default
 
-partitioning:
-  k_folds: null
-  stratify: True
-
-trainer:
-  max_epochs: 30

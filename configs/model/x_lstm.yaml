@@ -1,9 +1,9 @@
 _target_: src.models.xlstm.x_lstm.xLSTM
-num_layers: 3
-signature: [2, 1]
+num_layers: 4
+signature: [5, 1]
 inp_dim: 16
-head_dim: 32
-head_num: 4
+head_dim: 8
+head_num: 6
 output_size: 5
 p_factor: [2, 4/3]
 ker_size: 4
