@@ -3,7 +3,7 @@ import rootutils
 import streamlit as st
 
 rootutils.setup_root(__file__, indicator=".project-root", pythonpath=True)
-from src.model_pipeline import run_model_pipeline
+from src.model_pipeline import predict_file
 
 st.set_page_config(page_title="Model Prediction Dashboard", layout="wide")
 
@@ -14,7 +14,12 @@ to make predictions.""")
 with st.sidebar:
     st.header("Settings")
     model = st.selectbox("Model", ["MulticlassLogisticRegression", "DeepResBidirLSTM"])
-    batch_size = st.number_input("Batch Size", min_value=1, value=32, step=1)
+
+    wandb_artifact_path = st.text_input("Wandb Artifact Path", help="Wandb artifact path to download the model "
+                                                                    "checkpoint. For example, "
+                                                                    "'user/project/artifact:version'.")
+
+    batch_size = st.number_input("Batch Size", min_value=1, value=128, step=1)
     verbose = st.checkbox("Verbose Mode", value=True)
 
 uploaded_file = st.file_uploader("Choose a ZIP file", type="zip", help="Upload a ZIP file containing the data to be "
@@ -31,10 +36,11 @@ if uploaded_file is not None:
     if st.button('Process File'):
         with st.spinner('Processing...'):
             try:
-                prediction = run_model_pipeline(measurement_file_path=zip_path,
-                                                model_name=model,
-                                                batch_size=batch_size,
-                                                verbose=verbose)
+                prediction = predict_file(measurement_file_path=zip_path,
+                                          model_name=model,
+                                          batch_size=batch_size,
+                                          wandb_artifact_path=wandb_artifact_path,
+                                          verbose=verbose)
 
                 st.success(f"Predicted label: {prediction}")
             except Exception as e:
@@ -63,4 +69,3 @@ with st.expander("Click here for more information about this tool"):
     - Sitting
     - Standing
     """)
-

@@ -85,5 +85,11 @@ class DeepResBidirLSTM(LightningModule):
         loss, acc, f1 = self._shared_step(batch, batch_idx)
         self.log_dict({"val_loss": loss, "val_acc": acc, "val_f1": f1}, prog_bar=True)
 
+    def predict_step(self, batch, batch_idx, dataloader_idx=None):
+        x, _ = batch
+        logits = self(x)
+        preds = torch.argmax(logits, dim=1)
+        return preds
+
     def configure_optimizers(self):
         return self.hparams.optimizer(params=self.trainer.model.parameters())

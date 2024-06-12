@@ -71,15 +71,6 @@ class SensorDatasetTorch(Dataset):
         return data_tensors
 
 
-def create_data_loader(data_df, batch_size, shuffle=True, num_workers=0, pin_memory=False, persistent_workers=True):
-    return DataLoader(SensorDatasetTorch(data_df),
-                      batch_size=batch_size,
-                      shuffle=shuffle,
-                      num_workers=num_workers,
-                      pin_memory=pin_memory,
-                      persistent_workers=persistent_workers)
-
-
 class SensorDataModule(LightningDataModule):
     def __init__(self, batch_size, partitioned_data_dir, k_folds=None,
                  num_workers=None, pin_memory=True, use_persistent_workers=True):
@@ -127,21 +118,27 @@ class SensorDataModule(LightningDataModule):
             raise ValueError(f"Invalid fold index {fold}. Must be in range [0, {self.k_folds}).")
         self.current_fold = fold
 
-    def _create_dataloader(self, data, shuffle, persistent_workers=False):
-        if data is None:
-            raise ValueError("Data is not loaded. Call setup before creating a dataloader.")
+    @staticmethod
+    def create_dataloader(data, batch_size, num_workers=None, pin_memory=True, shuffle=False,
+                          persistent_workers=True):
         return DataLoader(SensorDatasetTorch(data),
-                          batch_size=self.batch_size,
+                          batch_size=batch_size,
                           shuffle=shuffle,
-                          num_workers=self.num_workers,
-                          persistent_workers=persistent_workers,
-                          pin_memory=self.pin_memory)
+                          num_workers=num_workers if num_workers is not None else os.cpu_count(),
+                          pin_memory=pin_memory,
+                          persistent_workers=persistent_workers)
 
     def train_dataloader(self):
-        return self._create_dataloader(self.train_data, shuffle=True)
+        return self.create_dataloader(self.train_data, batch_size=self.batch_size, shuffle=True,
+                                      pin_memory=self.pin_memory, num_workers=self.num_workers,
+                                      persistent_workers=self.use_persistent_workers)
 
     def val_dataloader(self):
-        return self._create_dataloader(self.val_data, shuffle=False, persistent_workers=self.use_persistent_workers)
+        return self.create_dataloader(self.val_data, batch_size=self.batch_size, shuffle=False,
+                                      pin_memory=self.pin_memory, num_workers=self.num_workers,
+                                      persistent_workers=self.use_persistent_workers)
 
     def test_dataloader(self):
-        return self._create_dataloader(self.test_data, shuffle=False, persistent_workers=self.use_persistent_workers)
+        return self.create_dataloader(self.test_data, batch_size=self.batch_size, shuffle=False,
+                                      pin_memory=self.pin_memory, num_workers=self.num_workers,
+                                      persistent_workers=self.use_persistent_workers)
