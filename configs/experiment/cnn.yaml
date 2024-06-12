@@ -2,8 +2,4 @@
 
 defaults:
   - override /model: cnn
-  - override /trainer: mps
   - override /partitioning: default
-
-trainer:
-  max_epochs: 30

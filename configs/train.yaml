@@ -5,7 +5,7 @@ defaults:
   - preprocessing: default
   - model: log_reg
   - data: sensor
-  - trainer: mps
+  - trainer: gpu
 
   - experiment: null
 
