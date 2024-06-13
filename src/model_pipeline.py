@@ -8,6 +8,8 @@ import wandb
 from hydra import compose, initialize
 from lightning import LightningModule, Trainer
 
+from src.models.x_lstm import XLSTM
+
 rootutils.setup_root(__file__, indicator=".project-root", pythonpath=True)
 
 from src.models.cnn import Simple1DCNN
@@ -35,7 +37,8 @@ LIGHTNING_MODULES = {
     "DeepResBidirLSTM": DeepResBidirLSTM,
     "Transformer": TransformerClassifier,
     "SimpleLSTM": SimpleLSTM,
-    "CNN": Simple1DCNN
+    "CNN": Simple1DCNN,
+    "xLSTM": XLSTM
 }
 
 

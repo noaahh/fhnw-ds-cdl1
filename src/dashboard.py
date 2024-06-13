@@ -22,7 +22,6 @@ with st.sidebar:
                                                                     "'user/project/artifact:version'.")
 
     batch_size = st.number_input("Batch Size", min_value=1, value=128, step=1)
-    verbose = st.checkbox("Verbose Mode", value=True)
 
 uploaded_file = st.file_uploader("Choose a ZIP file", type="zip", help="Upload a ZIP file containing the data to be "
                                                                        "processed.")
@@ -42,7 +41,7 @@ if uploaded_file is not None:
                                               model_name=model,
                                               batch_size=batch_size,
                                               wandb_artifact_path=wandb_artifact_path,
-                                              verbose=verbose)
+                                              verbose=True)
 
                     st.success(f"Predicted label: {prediction}")
                 except Exception as e:
