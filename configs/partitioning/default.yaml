@@ -1,5 +1,5 @@
-validation_size: 0.1
-test_size: 0.1
+validation_size: 0.2
+test_size: 0.2
 k_folds: null
 stratify: True
 split_by: session_id # alternative: segment_id
