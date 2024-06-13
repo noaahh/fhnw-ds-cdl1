@@ -2,21 +2,23 @@ _target_: src.models.x_lstm.XLSTM
 
 config:
   context_length: 251
-  num_blocks: 7
+  num_blocks: 5
   embedding_dim: 16
   slstm_at: [1]
   num_classes: 5
   mlstm_conv1d_kernel_size: 4
   mlstm_qkv_proj_blocksize: 4
-  mlstm_num_heads: 4
+  mlstm_num_heads: 2
+  mlstm_dropout: 0.4
   slstm_backend: "vanilla"
   slstm_num_heads: 4
   slstm_conv1d_kernel_size: 4
-  slstm_proj_factor: 1.3
-  slstm_act_fn: "gelu"
+  slstm_proj_factor: 1.333
+  slstm_act_fn: "selu"
+  slstm_dropout: 0.4
 
 optimizer:
-  _target_: torch.optim.AdamW # Changed from Adam to AdamW as described in the paper https://arxiv.org/pdf/2405.04517
+  _target_: torch.optim.Adam # Changed from Adam to AdamW as described in the paper https://arxiv.org/pdf/2405.04517
   _partial_: true
   lr: 0.001
-  weight_decay: 0.1 # as described in the paper https://arxiv.org/pdf/2405.04517 which is not a recommendation but a suggestion
+  #weight_decay: 0.1 # as described in the paper https://arxiv.org/pdf/2405.04517 which is not a recommendation but a suggestion

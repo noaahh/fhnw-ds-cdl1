@@ -51,7 +51,8 @@ class XLSTM(L.LightningModule):
 
     def forward(self, x):
         features = self.model(x)
-        output = self.classifier(features[:, -1, :])
+        pooled_features = torch.mean(features, dim=1)
+        output = self.classifier(pooled_features)
         return output
 
     def _shared_step(self, batch, batch_idx):

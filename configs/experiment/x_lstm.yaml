@@ -3,6 +3,3 @@
 defaults:
   - override /model: x_lstm
 
-trainer:
-  gradient_clip_val: 15.0 # As described in https://arxiv.org/pdf/1708.08989
-  gradient_clip_algorithm: norm
