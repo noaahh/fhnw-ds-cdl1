@@ -30,3 +30,4 @@ streamlit~=1.35.0
 requests==2.32.2
 fastapi==0.110.3
 einops~=0.8.0
+xlstm~=1.0.3
