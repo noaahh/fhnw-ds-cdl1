@@ -1,4 +1,5 @@
 # @package _global_
 
 defaults:
-  - override /model: cnn
+  - override /model: x_lstm
+

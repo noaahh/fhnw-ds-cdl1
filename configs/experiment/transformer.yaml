@@ -2,8 +2,3 @@
 
 defaults:
   - override /model: transformer
-  - override /trainer: mps
-  - override /partitioning: default
-
-trainer:
-  max_epochs: 30
