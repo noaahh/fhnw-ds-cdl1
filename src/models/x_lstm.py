@@ -1,7 +1,7 @@
-# path/filename: /path/to/your_pytorch_lightning_wrapper.py
+import lightning as L
 import torch
 import torch.nn as nn
-import lightning as L
+import torch.nn.functional as F
 from torchmetrics import Accuracy, F1Score
 from xlstm import (
     xLSTMBlockStack,
@@ -12,7 +12,7 @@ from xlstm import (
     sLSTMLayerConfig,
     FeedForwardConfig,
 )
-import torch.nn.functional as F
+
 
 class XLSTM(L.LightningModule):
     def __init__(self, config, optimizer):
@@ -74,6 +74,12 @@ class XLSTM(L.LightningModule):
         loss, acc, f1 = self._shared_step(batch, batch_idx)
         self.log_dict({"val_loss": loss, "val_acc": acc, "val_f1": f1}, prog_bar=True)
         return loss
+
+    def predict_step(self, batch, batch_idx, dataloader_idx=None):
+        x, y = batch
+        logits = self(x)
+        preds = torch.argmax(logits, dim=1).float()
+        return preds
 
     def configure_optimizers(self):
         return self.hparams.optimizer(params=self.trainer.model.parameters())
