@@ -22,6 +22,9 @@ class MeasurementFile:
         self.zip_file_path = zip_file_path
 
         self.data = self.init_data()
+        if self.is_android_platform():
+            self.handle_android_data(self.data)
+
         self.file_hash = self.generate_file_hash()
 
     def __repr__(self):
@@ -104,10 +107,6 @@ class MeasurementFile:
                         data[csv_filename.lower()] = pd.read_csv(f)
                 except KeyError:
                     pass
-
-        if self.is_android_platform():
-            self.handle_android_data(data)
-
         return data
 
     @staticmethod
