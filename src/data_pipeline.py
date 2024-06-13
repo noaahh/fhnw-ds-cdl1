@@ -425,12 +425,15 @@ def pipeline(cfg):
         folds, test_data = split_data(segments_df, cfg)
 
         folds_data = [{'train': None, 'validate': None} for _ in range(len(folds))]
+
+        unscaled_val_folds = []
         for i, (train_data, val_data) in enumerate(folds):
+            unscaled_val_folds.append(val_data.copy())
             train_data, val_data, _ = scale_data(train_data, val_data, None, cfg)
             folds_data[i]['train'] = train_data
             folds_data[i]['validate'] = val_data
 
-        train_all = pd.concat([fd['validate'] for fd in folds_data], axis=0)
+        train_all = pd.concat(unscaled_val_folds, axis=0)
         train_all, _, test_data = scale_data(train_all, None, test_data, cfg)
         data_partitions = {
             'folds': [(fd['train'], fd['validate']) for fd in folds_data],
@@ -440,9 +443,9 @@ def pipeline(cfg):
 
     else:
         train_data, val_data, test_data = split_data(segments_df, cfg)
-        train_data, val_data, _ = scale_data(train_data, val_data, None, cfg)
+        train_all = pd.concat([train_data.copy(), val_data.copy()], axis=0)
 
-        train_all = pd.concat([train_data, val_data], axis=0)
+        train_data, val_data, _ = scale_data(train_data, val_data, None, cfg)
         train_all, _, test_data = scale_data(train_all, None, test_data, cfg)
 
         data_partitions = {
