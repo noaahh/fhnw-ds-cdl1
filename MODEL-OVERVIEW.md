@@ -122,7 +122,11 @@ The data used for this challenge is around 10hrs of sensor data. It is tracked a
 We want to highlight that the results here need to be looked at with a grain of salt. The dataset is too small to make very solid conclusions. 
 Given the usage of the devices, the variance can also be questioned.
 
-None of the models received any special hyperparameter tuning. The hyperparameters were chosen common defaults and manual tuning to ensure smooth training.
+None of the models received any special hyperparameter tuning. The hyperparameters chosen are common defaults, defined by literature and some models received some minor manual tuning to ensure smooth training.
+
+To help negate the small dataset, we decided to include a KFold cross-validation to improve the analysis.
+
+With all that said, let's look at the results.
 
 The data is split as follows:
 - **Train**: 60% of complete data
@@ -158,9 +162,20 @@ The table below shows the performances of all the models on validation/test data
 |                                         | Accuracy    | 0.874 | 0.7748 | 0.7569 |
 
 
-Given the task at hand we can see that both simpel and complex models do very well on the task at hand. 
+Given the task at hand we can see that both simple and complex models do very well. 
 Especially transformer, CNN and Deep Residual Bidirectional LSTM are performing very well.
 
-Interestingly the xLSTM model is not performing well on the refit or KFold, even though on main run type it seems to do not bad.
+The Multiclass Logistic Regression is performing the worst across all runs. However, given the simplicity of the model this is not surprising.
+
+Interestingly the xLSTM model is not performing well on the refit or KFold, even though on main run type it did well. This indicates that the model is not generalizing as well as other deep learning models.
+
+Very surprising to see is how well the CNN model is performing. Across all runs it has the best performance, even if only by a small margin in some cases.
+
+## Conclusion
+Looking at big picture here, we can see that, while superior in complex tasks, classical machine learning approaches can very well keep up with deep learning models in certain tasks.
+
+Additionally, it is not always required to use the latest bleeding edge models to get good results, but you can never have enough data.
+
+
 
 
