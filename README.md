@@ -48,12 +48,12 @@ flexibility and configurability for various experiments:
       - [`fft.py`](/src/extraction/fft.py): The `fft.py` file holds all Fourier Transform related feature extraction functions. It, for example, holds functions that will extract the Dominant Frequency of a signal (sensor recording).
       - [`moving_average.py`](/src/extraction/moving_average.py): As the name already reveals, the `moving_average.py` file holds two functions that perform a smoothing task using a rolling average on a sliding window.
     - [`models/`](/src/models/): The models directory contains all explored model architectures that were trained in the context of this challenge.
-      - [`cnn.py`](/src/models/cnn.py): The Convolutional Neural Network (CNN) model as explained in [Overview]().
-      - [`deep_res_bidir_lstm.py`](/src/models/deep_res_bidir_lstm.py): The Deep Residual Bidirectional LSTM model as explained in [Overview]().
-      - [`log_reg.py`](/src/models/log_reg.py): The Logistic Regression model as explained in [Overview]().
-      - [`lstm.py`](/src/models/lstm.py): The Long Short-Term Memory (LSTM) model as explained in [Overview]().
-      - [`x_lstm.py`](/src/models/x_lstm.py): The Extended Long Short-Term memory (xLSTM) model as explained in [Overview]().
-      - [`transformer.py`](/src/models/transformer.py): The Transformer model as explained in [Overview]().
+      - [`cnn.py`](/src/models/cnn.py): The Convolutional Neural Network (CNN) model as explained in [Model Overview](/MODEL-OVERVIEW.md).
+      - [`deep_res_bidir_lstm.py`](/src/models/deep_res_bidir_lstm.py): The Deep Residual Bidirectional LSTM model as explained in [Model Overview](/MODEL-OVERVIEW.md).
+      - [`log_reg.py`](/src/models/log_reg.py): The Logistic Regression model as explained in [Model Overview](/MODEL-OVERVIEW.md).
+      - [`lstm.py`](/src/models/lstm.py): The Long Short-Term Memory (LSTM) model as explained in [Model Overview](/MODEL-OVERVIEW.md).
+      - [`x_lstm.py`](/src/models/x_lstm.py): The Extended Long Short-Term memory (xLSTM) model as explained in [Model Overview](/MODEL-OVERVIEW.md).
+      - [`transformer.py`](/src/models/transformer.py): The Transformer model as explained in [Model Overview](/MODEL-OVERVIEW.md).
     - [`processing/`](/src/processing/): The `processing` directory contains files with functions used for processing the signals in a preprocessing step.
       - [`denoising.py`](/src/processing/denoising.py): The denoising file contains functions that introduce Butterworth Filtering (as a denoising measure and to eliminate possibily faulty peaks) and Wavelet Denoising, another denoising measure with generalizing effect. 
       - [`time_series.py`](/src/processing/time_series.py): Controls functions used for cropping the segments into 5s pieces and resampling all files into the same sampling rate domain.
