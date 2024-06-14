@@ -31,8 +31,8 @@ tasks using time-series data from multiple sensors.
   * [Workflow and Execution](#workflow-and-execution)
   * [Dashboard](#dashboard)
   * [Model Overview](#model-overview)
+  * [Notebooks](#notebooks)
   * [Codebase](#codebase)
-  * [Makefile](#makefile)
 <!-- TOC -->
 
 ## Prerequisites
@@ -68,31 +68,35 @@ pip install -r requirements.txt
 
 ## Project Overview
 
-- **[`configs/`](configs/)**: Houses [Hydra](https://hydra.cc/) configurations for experiments, detailing data pipelines and training setups. More at [Experiment Configuration with Hydra](#experiment-configuration-with-hydra).
+- **[`configs/`](configs/)**: Houses [Hydra](https://hydra.cc/) configurations for experiments, detailing data pipelines
+  and training setups. More at [Experiment Configuration with Hydra](#experiment-configuration-with-hydra).
 
 - **[`data/`](data/)**: Stores raw, cached, and processed data:
-  - **[`raw/`](data/raw/)**: Original data files.
-  - **[`cache/`](data/cache/)**: Temporarily stores data during processing.
-  - **[`partitions/`](data/partitions/)**: Data segments post-processing.
+    - **[`raw/`](data/raw/)**: Original data files.
+    - **[`cache/`](data/cache/)**: Temporarily stores data during processing.
+    - **[`partitions/`](data/partitions/)**: Data segments post-processing.
 
 - **[`notebooks/`](notebooks/)**: Contains Jupyter Notebooks for data exploration and pipeline trials:
-  - **[`partitioning.ipynb`](notebooks/partitioning.ipynb)**: Validates data partitioning.
-  - **[`preprocessing.ipynb`](notebooks/preprocessing.ipynb)**: Develops preprocessing strategies.
-  - **[`session_truncation.ipynb`](notebooks/session_truncation.ipynb)**: Examines session truncation, a preprocessing strategy.
+    - **[`partitioning.ipynb`](notebooks/partitioning.ipynb)**: Validates data partitioning.
+    - **[`preprocessing.ipynb`](notebooks/preprocessing.ipynb)**: Develops preprocessing strategies.
+    - **[`session_truncation.ipynb`](notebooks/session_truncation.ipynb)**: Examines session truncation, a preprocessing
+      strategy.
 
 - **[`scripts/`](scripts/)**: Simple script for model training on GPU clusters.
 
 - **[`src/`](src/)**: Source code for data handling and model training:
-  - **Data Management**: Includes helpers and wrappers for data integration and management.
-  - **Feature Extraction**: Functions for signal processing and feature extraction.
-  - **Model Architectures**: Contains scripts for CNN, LSTM, Logistic Regression, Transformer, and xLSTM models.
-  - **Processing Utilities**: Manages data preprocessing, feature engineering, and prediction scripts.
+    - **Data Management**: Includes helpers and wrappers for data integration and management.
+    - **Feature Extraction**: Functions for signal processing and feature extraction.
+    - **Model Architectures**: Contains scripts for CNN, LSTM, Logistic Regression, Transformer, and xLSTM models.
+    - **Processing Utilities**: Manages data preprocessing, feature engineering, and prediction scripts.
 
 - **[`dockerfiles`](dockerfiles/)**: Contains Docker configurations for project setup and deployment:
-  - **[`Dockerfile`](dockerfiles/Dockerfile)** and **[`docker-compose.yml`](./docker-compose.yml)**: Define the project's container environment.
-  - **[`Dockerfile.dashboard`](dockerfiles/Dockerfile.dashboard)**: Configures the Streamlit Dashboard container.
+    - **[`Dockerfile`](dockerfiles/Dockerfile)** and **[`docker-compose.yml`](./docker-compose.yml)**: Define the
+      project's container environment.
+    - **[`Dockerfile.dashboard`](dockerfiles/Dockerfile.dashboard)**: Configures the Streamlit Dashboard container.
 
-- **[`Makefile`](Makefile)**: Scripts for routine tasks like setting up environments, running experiments, and cleaning resources.
+- **[`Makefile`](Makefile)**: Scripts for routine tasks like setting up environments, running experiments, and cleaning
+  resources.
 
 ## Data Structure
 
@@ -170,57 +174,62 @@ python src/train.py experiment=cnn model.optimizer.lr=0.001
 
 In this command, `experiment=cnn` specifies that the CNN model should be trained, and `model.optimizer.lr=0.001`
 
-
 ### Defaults
 
-The default configuration files are defined in the `configs/**/defaults.yaml` files. These files set the baseline parameters for the various aspects of the application. Below are the most important default parameters outlined to help understand their purpose and how they can be customized:
+The default configuration files are defined in the `configs/**/defaults.yaml` files. These files set the baseline
+parameters for the various aspects of the application. Below are the most important default parameters outlined to help
+understand their purpose and how they can be customized:
 
 #### General Configuration
+
 - **n_jobs**: Number of jobs to run in parallel. `null` indicates that it defaults to the number of cores.
 - **verbose**: Enables verbose output, set to `true` by default.
 - **seed**: Seed for random number generation, set to `1337` for reproducibility.
 
 #### Data Module
+
 - **data**:
-  - **batch_size**: Number of samples in each batch, defaults to `128`.
-  - **num_workers**: Number of subprocesses to use for data loading. `null` uses the number of CPU cores.
-  - **pin_memory**: Whether to use pinned (page-locked) memory. Set to `true`.
-  - **use_persistent_workers**: Use workers which remain alive between data iterations. Set to `false`.
+    - **batch_size**: Number of samples in each batch, defaults to `128`.
+    - **num_workers**: Number of subprocesses to use for data loading. `null` uses the number of CPU cores.
+    - **pin_memory**: Whether to use pinned (page-locked) memory. Set to `true`.
+    - **use_persistent_workers**: Use workers which remain alive between data iterations. Set to `false`.
 
 #### Database Configuration
+
 - **database**:
-  - **bucket**: Bucket name for the database, sourced from environment variable `INFLUXDB_INIT_BUCKET`.
-  - **org**: Organization name for the database, sourced from environment variable `INFLUXDB_INIT_ORG`.
-  - **url**: Database URL, sourced from environment variable `INFLUXDB_URL`.
-  - **use_cache**: Enable caching of database queries, set to `true`.
+    - **bucket**: Bucket name for the database, sourced from environment variable `INFLUXDB_INIT_BUCKET`.
+    - **org**: Organization name for the database, sourced from environment variable `INFLUXDB_INIT_ORG`.
+    - **url**: Database URL, sourced from environment variable `INFLUXDB_URL`.
+    - **use_cache**: Enable caching of database queries, set to `true`.
 
 #### Preprocessing
+
 - **preprocessing**:
-  - **crop**: Parameters defining how to crop the data of each session.
-    - **start_seconds**: Start time in seconds for cropping, set to `5`.
-    - **end_seconds**: End time in seconds for cropping, also set to `5`.
-  - **resample_rate_hz**: Data resampling rate in Hz, set to `50`.
-  - **segment_size_seconds**: Size of each data segment in seconds, set to `5`.
-  - **overlap_seconds**: Overlap between segments in seconds, set to `2`.
-  - **max_session_length_s**: Maximum session length in seconds, set to `180`.
-  - **feature_extraction**: Controls feature extraction methods.
-    - **use_fft**: Use Fast Fourier Transform, set to `false`.
-    - **use_pearson_corr**: Use Pearson correlation, set to `false`.
-  - **smoothing**: Smoothing method parameters.
-    - **type**: Type of filter, set to `butterworth`.
-    - **cutoff**: Filter cutoff frequency, set to `6`.
-    - **order**: Filter order, set to `4`.
-  - **scaling**: Data scaling type.
-    - **type**: Type of scaling, `standard` indicates standard normalization.
+    - **crop**: Parameters defining how to crop the data of each session.
+        - **start_seconds**: Start time in seconds for cropping, set to `5`.
+        - **end_seconds**: End time in seconds for cropping, also set to `5`.
+    - **resample_rate_hz**: Data resampling rate in Hz, set to `50`.
+    - **segment_size_seconds**: Size of each data segment in seconds, set to `5`.
+    - **overlap_seconds**: Overlap between segments in seconds, set to `2`.
+    - **max_session_length_s**: Maximum session length in seconds, set to `180`.
+    - **feature_extraction**: Controls feature extraction methods.
+        - **use_fft**: Use Fast Fourier Transform, set to `false`.
+        - **use_pearson_corr**: Use Pearson correlation, set to `false`.
+    - **smoothing**: Smoothing method parameters.
+        - **type**: Type of filter, set to `butterworth`.
+        - **cutoff**: Filter cutoff frequency, set to `6`.
+        - **order**: Filter order, set to `4`.
+    - **scaling**: Data scaling type.
+        - **type**: Type of scaling, `standard` indicates standard normalization.
 
 #### Data Partitioning
-- **partitioning**:
-  - **validation_size**: Fraction of data set aside for validation, set to `0.2`.
-  - **test_size**: Fraction of data used for testing, also set to `0.2`.
-  - **k_folds**: Number of folds for K-fold cross-validation. `null` indicates not used. Is situational set to `5`.
-  - **stratify**: Whether to stratify splits, set to `true`.
-  - **split_by**: Attribute used to split data, set to `session_id`. Session refers to a single measurement file.
 
+- **partitioning**:
+    - **validation_size**: Fraction of data set aside for validation, set to `0.2`.
+    - **test_size**: Fraction of data used for testing, also set to `0.2`.
+    - **k_folds**: Number of folds for K-fold cross-validation. `null` indicates not used. Is situational set to `5`.
+    - **stratify**: Whether to stratify splits, set to `true`.
+    - **split_by**: Attribute used to split data, set to `session_id`. Session refers to a single measurement file.
 
 ## Workflow and Execution
 
@@ -306,39 +315,74 @@ The project explores various deep learning models for sensor-based activity reco
 process time-series data from multiple sensors and predict the activity label associated with the data. Information
 about the models and their architectures can be found in the [Model Overview](/MODEL-OVERVIEW.md) document.
 
+## Notebooks
+
+The project includes Jupyter Notebooks for exploring the partitioning, preprocessing, and session truncation of the
+sensor data. These notebooks provide insights into the data structure and processing steps, aiding in the development of
+the data pipeline and feature engineering strategies.
+
+All notebooks are located in the `notebooks/` directory with corresponding names and HTML exports in
+the `notebooks/exports/`.
+
 ## Codebase
 
-This section provides a detailed breakdown of the Python files within the project's `src/` directory, outlining their specific roles in data handling, feature extraction, model training, and utility functions.
+This section provides a detailed breakdown of the Python files within the project's `src/` directory, outlining their
+specific roles in data handling, feature extraction, model training, and utility functions.
 
 **Data Handling (`src/data/`)**
-- **[`dataset.py`](src/data/dataset.py)**: Implements the `SensorDatasetTorch` and `SensorDataModule` classes to manage datasets in PyTorch. It allows for efficient data handling and integration with PyTorch models.
-- **[`db.py`](src/data/db.py)**: Contains the `InfluxDBWrapper`, simplifying the process of connecting to and querying from an InfluxDB timeseries database.
-- **[`label_mapping.py`](src/data/label_mapping.py)**: Manages the conversion of measurement filenames to typed Enums, ensuring consistent label handling across the dataset.
-- **[`measurement_file.py`](src/data/measurement_file.py)**: Provides structured management and processing of measurement data, ensuring data integrity and facilitating the handling of platform-specific variations.
+
+- **[`dataset.py`](src/data/dataset.py)**: Implements the `SensorDatasetTorch` and `SensorDataModule` classes to manage
+  datasets in PyTorch. It allows for efficient data handling and integration with PyTorch models.
+- **[`db.py`](src/data/db.py)**: Contains the `InfluxDBWrapper`, simplifying the process of connecting to and querying
+  from an InfluxDB timeseries database.
+- **[`label_mapping.py`](src/data/label_mapping.py)**: Manages the conversion of measurement filenames to typed Enums,
+  ensuring consistent label handling across the dataset.
+- **[`measurement_file.py`](src/data/measurement_file.py)**: Provides structured management and processing of
+  measurement data, ensuring data integrity and facilitating the handling of platform-specific variations.
 
 **Feature Extraction (`src/extraction/`)**
-- **[`fft.py`](src/extraction/fft.py)**: Focuses on Fourier Transform techniques for signal analysis, extracting key frequency-based features like the Dominant Frequency from sensor data.
-- **[`moving_average.py`](src/extraction/moving_average.py)**: Implements smoothing techniques using rolling averages, enhancing data quality by reducing noise and variations.
+
+- **[`fft.py`](src/extraction/fft.py)**: Focuses on Fourier Transform techniques for signal analysis, extracting key
+  frequency-based features like the Dominant Frequency from sensor data.
+- **[`moving_average.py`](src/extraction/moving_average.py)**: Implements smoothing techniques using rolling averages,
+  enhancing data quality by reducing noise and variations.
 
 **Models (`src/models/`)**
+
 - More detailed information about the models can be found in the [Model Overview](/MODEL-OVERVIEW.md) document.
-- **[`cnn.py`](src/models/cnn.py)**: Defines the Convolutional Neural Network architecture for processing spatially correlated data inputs.
-- **[`deep_res_bidir_lstm.py`](src/models/deep_res_bidir_lstm.py)**: Implements a Deep Residual Bidirectional LSTM model, enhancing the capability to capture both past and future contexts in sequence data.
-- **[`log_reg.py`](src/models/log_reg.py)**: Sets up a Logistic Regression model, providing a baseline for performance comparison.
-- **[`lstm.py`](src/models/lstm.py)**: Configures a standard Long Short-Term Memory network suitable for sequence prediction tasks.
+- **[`cnn.py`](src/models/cnn.py)**: Defines the Convolutional Neural Network architecture for processing spatially
+  correlated data inputs.
+- **[`deep_res_bidir_lstm.py`](src/models/deep_res_bidir_lstm.py)**: Implements a Deep Residual Bidirectional LSTM
+  model, enhancing the capability to capture both past and future contexts in sequence data.
+- **[`log_reg.py`](src/models/log_reg.py)**: Sets up a Logistic Regression model, providing a baseline for performance
+  comparison.
+- **[`lstm.py`](src/models/lstm.py)**: Configures a standard Long Short-Term Memory network suitable for sequence
+  prediction tasks.
 - **[`x_lstm.py`](src/models/x_lstm.py)**: Describes an extension of the LSTM model.
-- **[`transformer.py`](src/models/transformer.py)**: Details the implementation of the Transformer model, leveraging self-attention mechanisms for data processing.
+- **[`transformer.py`](src/models/transformer.py)**: Details the implementation of the Transformer model, leveraging
+  self-attention mechanisms for data processing.
 
 **Processing and Prediction (`src/processing/`)**
-- **[`denoising.py`](src/processing/denoising.py)**: Contains methods for signal denoising, such as Butterworth and Wavelet Denoising, to improve data quality before feature extraction.
-- **[`time_series.py`](src/processing/time_series.py)**: Manages time series data operations like segment cropping and resampling, standardizing data inputs for modeling.
+
+- **[`denoising.py`](src/processing/denoising.py)**: Contains methods for signal denoising, such as Butterworth and
+  Wavelet Denoising, to improve data quality before feature extraction.
+- **[`time_series.py`](src/processing/time_series.py)**: Manages time series data operations like segment cropping and
+  resampling, standardizing data inputs for modeling.
 
 **Utility and Management (`src/`)**
-- **[`dashboard.py`](src/dashboard.py)**: Implements a Streamlit dashboard for interactive model evaluations and visualizations.
-- **[`data_pipeline.py`](src/data_pipeline.py)**: Coordinates the flow from data ingestion through preprocessing to feature engineering, dynamically configured via Hydra.
-- **[`data_zipper.py`](src/data_zipper.py)**: Organizes sensor data into compressed formats for efficient storage and retrieval.
-- **[`file_import.py`](src/file_import.py)**: Automates the import of sensor data from zip files into the database, supporting concurrent processing to enhance efficiency.
-- **[`model_pipeline.py`](src/model_pipeline.py)**: Handles the setup and execution of model training and prediction workflows, including data loading and logging.
-- **[`predict_api.py`](src/predict_api.py)**: Establishes an API using FastAPI for uploading files and retrieving model predictions.
+
+- **[`dashboard.py`](src/dashboard.py)**: Implements a Streamlit dashboard for interactive model evaluations and
+  visualizations.
+- **[`data_pipeline.py`](src/data_pipeline.py)**: Coordinates the flow from data ingestion through preprocessing to
+  feature engineering, dynamically configured via Hydra.
+- **[`data_zipper.py`](src/data_zipper.py)**: Organizes sensor data into compressed formats for efficient storage and
+  retrieval.
+- **[`file_import.py`](src/file_import.py)**: Automates the import of sensor data from zip files into the database,
+  supporting concurrent processing to enhance efficiency.
+- **[`model_pipeline.py`](src/model_pipeline.py)**: Handles the setup and execution of model training and prediction
+  workflows, including data loading and logging.
+- **[`predict_api.py`](src/predict_api.py)**: Establishes an API using FastAPI for uploading files and retrieving model
+  predictions.
 - **[`train.py`](src/train.py)**: Outlines the procedure for training models using configurations and data specified.
-- **[`utils.py`](src/utils.py)**: Offers miscellaneous functions for environment setup, data path generation, and parameter validation.
+- **[`utils.py`](src/utils.py)**: Offers miscellaneous functions for environment setup, data path generation, and
+  parameter validation.
