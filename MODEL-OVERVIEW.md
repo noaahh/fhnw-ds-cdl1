@@ -115,7 +115,6 @@ On top of the transformer we add a classification head to predict the activity. 
 
 ## Comparison between Classical and Deep Learning Models
 
-
 The data is split as follows:
 - **Train**: 60% of complete data
 - **Validation**: 20% of complete data
@@ -149,5 +148,10 @@ The table below shows the performances of all the models on validation/test data
 | Extended Long Short-Term Memory (xLSTM) | F1 Weighted | 0.907 | 0.7969 | 0.8017 |
 |                                         | Accuracy    | 0.874 | 0.7748 | 0.7569 |
 
+
+Given the task at hand we can see that both simpel and complex models do very well on the task at hand. 
+Especially transformer, CNN and Deep Residual Bidirectional LSTM are performing very well.
+
+Interestingly the xLSTM model is not performing well on the refit or KFold, even though on main run type it seems to do not bad.
 
 
