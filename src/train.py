@@ -137,6 +137,12 @@ def train(cfg):
         if cfg.ckpt_path is not None:
             raise ValueError("Checkpointing is not supported with k-folds")
 
+    try:
+        torch.set_float32_matmul_precision('medium')
+    except Exception as e:
+        log.error('unable to activate TensorCore')
+        log.error(e)
+
     wandb_tags = []
     if refit_on_all_data:
         wandb_tags.append("refit_on_all_data")
