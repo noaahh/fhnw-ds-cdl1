@@ -1,4 +1,4 @@
-# Model Overview
+# Analysis
 
 ## Explored Models
 
@@ -172,10 +172,30 @@ Interestingly the xLSTM model is not performing well on the refit or KFold, even
 Very surprising to see is how well the CNN model is performing. Across all runs it has the best performance, even if only by a small margin in some cases.
 
 ## Conclusion
-Looking at big picture here, we can see that, while superior in complex tasks, classical machine learning approaches can very well keep up with deep learning models in certain tasks.
+The performance analysis of both classical machine learning and deep learning models on the given sensor data reveals several important insights. While deep learning models generally demonstrate superior performance, particularly in handling complex tasks, classical machine learning approaches, such as Multiclass Logistic Regression, also show commendable results in certain scenarios.
 
-Additionally, it is not always required to use the latest bleeding edge models to get good results, but you can never have enough data.
+### Key Insights:
+1. **Model Performance**: The Transformer, CNN, and Deep Residual Bidirectional LSTM models exhibit strong performance across all run types, highlighting their ability to effectively capture and model the patterns in the sensor data. Surprisingly, the CNN model performs exceptionally well, even outperforming more complex models in some cases. This underscores the efficiency of CNNs in handling time-series data.
 
+2. **Classical vs. Deep Learning**: Although the Multiclass Logistic Regression model shows the lowest performance across all runs, it still provides a valuable baseline. This shows that while deep learning models are powerful, simpler models can still be effective, especially in scenarios with limited computational resources or data. Both classical and deep learning models perform very well on the dataset, but the limited size and variance of the dataset are critical weaknesses in this challenge.
 
+3. **xLSTM Model**: The inconsistent performance of the xLSTM model across different run types suggests problems with generalization. Despite its advanced architecture, the model's performance drops significantly in the refit and KFold runs, suggesting potential overfitting or sensitivity to data splitting.
 
+### Dataset considerations:
+The small dataset size and limited variance are significant limitations of this analysis. With only 10 hours of sensor data, the models may overfit to the specific patterns present in this dataset. Increasing the dataset size and ensuring a more diverse range of scenarios may provide a more robust evaluation and improve model generalization.
+
+### Recommendations for future work:
+1. **Data Expansion**: Collecting more sensor data over a longer period of time and from different environments will increase the representativeness of the dataset, leading to more reliable model training and evaluation. Tracking data across multiple devices and from different people in different life states will introduce the natural variance needed for more comprehensive analysis.
+
+2. **Comprehensive hyperparameter tuning: Perform thorough hyperparameter optimization for each model to fully exploit its potential and achieve better performance.
+
+3. **Advanced cross-validation techniques: Implementing stratified cross-validation and other advanced techniques can help ensure that each fold is representative of the overall data distribution, mitigating problems related to data variance.
+
+### Real-World Implications:
+The findings from this challenge have practical implications for real-world applications of sensor activity detection. The ability of simpler models to perform well suggests that effective solutions can be developed even with limited computational resources, making them accessible to a wide range of applications. However, for more accurate and robust activity recognition, especially in complex and diverse environments, the use of advanced deep learning models with comprehensive datasets is crucial.
+
+### Final Thoughts:
+This challenge has established a solid foundational framework for future testing and experimentation, from data generation to model training. While the current results highlight the potential of both classical and deep learning models, the primary limitation remains the dataset. Future work should focus on extensive data collection and use of the developed framework to explore the full potential of advanced models, thereby increasing the reliability and generalizability of the results.
+
+By addressing the identified limitations and following the outlined recommendations, future work can build upon these findings to develop more robust models for sensor activity recognition. The results may very well differ with a more comprehensive dataset, potentially showcasing the superiority of complex deep learning models.
 
