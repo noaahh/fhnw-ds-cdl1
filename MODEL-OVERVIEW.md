@@ -115,6 +115,15 @@ On top of the transformer we add a classification head to predict the activity. 
 
 ## Comparison between Classical and Deep Learning Models
 
+Before looking at the results there are a few things to note.
+
+The data used for this challenge is around 10hrs of sensor data. It is tracked across 3 different devices. 
+
+We want to highlight that the results here need to be looked at with a grain of salt. The dataset is too small to make very solid conclusions. 
+Given the usage of the devices, the variance can also be questioned.
+
+None of the models received any special hyperparameter tuning. The hyperparameters were chosen common defaults and manual tuning to ensure smooth training.
+
 The data is split as follows:
 - **Train**: 60% of complete data
 - **Validation**: 20% of complete data
