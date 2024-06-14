@@ -19,26 +19,6 @@ services:
       - DOCKER_INFLUXDB_INIT_ORG=${INFLUXDB_INIT_ORG}
       - DOCKER_INFLUXDB_INIT_BUCKET=${INFLUXDB_INIT_BUCKET}
 
-  import_db:
-    build: .
-    restart: unless-stopped
-    command:
-      - python /app/import.py --raw-data-dir "data/raw" --verbose --run-periodically
-    env_file:
-      - .env
-    volumes:
-      - ./data:/app/data:rw
-    depends_on:
-      - influxdb
-
-  filebrowser:
-    image: filebrowser/filebrowser
-    restart: unless-stopped
-    volumes:
-      - ./data:/srv
-    ports:
-      - "8080:80"
-
   streamlit_app:
     build:
         context: .
@@ -52,5 +32,3 @@ services:
 volumes:
   influxdbv2:
   influxdb_config:
-  filebrowserdb:
-  filebrowserconfig:

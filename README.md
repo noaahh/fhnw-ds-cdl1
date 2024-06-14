@@ -46,6 +46,19 @@ Before you begin, ensure you have met the following requirements:
 
 ## Installation
 
+Copy the example environment file and adjust the settings as needed:
+
+```bash
+cp .env.example .env
+```
+
+Set the variables in the `.env` file to match your environment. Defaults are provided for the database connection and
+other services. Replace the `PROJECT_ROOT` variable with the absolute path to the project root directory.
+
+Note: The absolute path wont work in the Docker container, so you need to set the `PROJECT_ROOT` variable to be relative
+to the Docker container file system.
+
+
 ### Conda Environment
 
 Set up the Python environment with Conda:
