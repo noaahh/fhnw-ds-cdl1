@@ -310,35 +310,35 @@ about the models and their architectures can be found in the [Model Overview](/M
 
 This section provides a detailed breakdown of the Python files within the project's `src/` directory, outlining their specific roles in data handling, feature extraction, model training, and utility functions.
 
-**Data Handling (`/src/data/`)**
-- **[`dataset.py`](/src/data/dataset.py)**: Implements the `SensorDatasetTorch` and `SensorDataModule` classes to manage datasets in PyTorch. It allows for efficient data handling and integration with PyTorch models.
-- **[`db.py`](/src/data/db.py)**: Contains the `InfluxDBWrapper`, simplifying the process of connecting to and querying from an InfluxDB timeseries database.
-- **[`label_mapping.py`](/src/data/label_mapping.py)**: Manages the conversion of measurement filenames to typed Enums, ensuring consistent label handling across the dataset.
-- **[`measurement_file.py`](/src/data/measurement_file.py)**: Provides structured management and processing of measurement data, ensuring data integrity and facilitating the handling of platform-specific variations.
+**Data Handling (`src/data/`)**
+- **[`dataset.py`](src/data/dataset.py)**: Implements the `SensorDatasetTorch` and `SensorDataModule` classes to manage datasets in PyTorch. It allows for efficient data handling and integration with PyTorch models.
+- **[`db.py`](src/data/db.py)**: Contains the `InfluxDBWrapper`, simplifying the process of connecting to and querying from an InfluxDB timeseries database.
+- **[`label_mapping.py`](src/data/label_mapping.py)**: Manages the conversion of measurement filenames to typed Enums, ensuring consistent label handling across the dataset.
+- **[`measurement_file.py`](src/data/measurement_file.py)**: Provides structured management and processing of measurement data, ensuring data integrity and facilitating the handling of platform-specific variations.
 
-**Feature Extraction (`/src/extraction/`)**
-- **[`fft.py`](/src/extraction/fft.py)**: Focuses on Fourier Transform techniques for signal analysis, extracting key frequency-based features like the Dominant Frequency from sensor data.
-- **[`moving_average.py`](/src/extraction/moving_average.py)**: Implements smoothing techniques using rolling averages, enhancing data quality by reducing noise and variations.
+**Feature Extraction (`src/extraction/`)**
+- **[`fft.py`](src/extraction/fft.py)**: Focuses on Fourier Transform techniques for signal analysis, extracting key frequency-based features like the Dominant Frequency from sensor data.
+- **[`moving_average.py`](src/extraction/moving_average.py)**: Implements smoothing techniques using rolling averages, enhancing data quality by reducing noise and variations.
 
-**Models (`/src/models/`)**
+**Models (`src/models/`)**
 - More detailed information about the models can be found in the [Model Overview](/MODEL-OVERVIEW.md) document.
-- **[`cnn.py`](/src/models/cnn.py)**: Defines the Convolutional Neural Network architecture for processing spatially correlated data inputs.
-- **[`deep_res_bidir_lstm.py`](/src/models/deep_res_bidir_lstm.py)**: Implements a Deep Residual Bidirectional LSTM model, enhancing the capability to capture both past and future contexts in sequence data.
-- **[`log_reg.py`](/src/models/log_reg.py)**: Sets up a Logistic Regression model, providing a baseline for performance comparison.
-- **[`lstm.py`](/src/models/lstm.py)**: Configures a standard Long Short-Term Memory network suitable for sequence prediction tasks.
-- **[`x_lstm.py`](/src/models/x_lstm.py)**: Describes an extension of the LSTM model.
-- **[`transformer.py`](/src/models/transformer.py)**: Details the implementation of the Transformer model, leveraging self-attention mechanisms for data processing.
+- **[`cnn.py`](src/models/cnn.py)**: Defines the Convolutional Neural Network architecture for processing spatially correlated data inputs.
+- **[`deep_res_bidir_lstm.py`](src/models/deep_res_bidir_lstm.py)**: Implements a Deep Residual Bidirectional LSTM model, enhancing the capability to capture both past and future contexts in sequence data.
+- **[`log_reg.py`](src/models/log_reg.py)**: Sets up a Logistic Regression model, providing a baseline for performance comparison.
+- **[`lstm.py`](src/models/lstm.py)**: Configures a standard Long Short-Term Memory network suitable for sequence prediction tasks.
+- **[`x_lstm.py`](src/models/x_lstm.py)**: Describes an extension of the LSTM model.
+- **[`transformer.py`](src/models/transformer.py)**: Details the implementation of the Transformer model, leveraging self-attention mechanisms for data processing.
 
-**Processing and Prediction (`/src/processing/`)**
-- **[`denoising.py`](/src/processing/denoising.py)**: Contains methods for signal denoising, such as Butterworth and Wavelet Denoising, to improve data quality before feature extraction.
-- **[`time_series.py`](/src/processing/time_series.py)**: Manages time series data operations like segment cropping and resampling, standardizing data inputs for modeling.
+**Processing and Prediction (`src/processing/`)**
+- **[`denoising.py`](src/processing/denoising.py)**: Contains methods for signal denoising, such as Butterworth and Wavelet Denoising, to improve data quality before feature extraction.
+- **[`time_series.py`](src/processing/time_series.py)**: Manages time series data operations like segment cropping and resampling, standardizing data inputs for modeling.
 
-**Utility and Management (`/src/`)**
-- **[`dashboard.py`](/src/dashboard.py)**: Implements a Streamlit dashboard for interactive model evaluations and visualizations.
-- **[`data_pipeline.py`](/src/data_pipeline.py)**: Coordinates the flow from data ingestion through preprocessing to feature engineering, dynamically configured via Hydra.
-- **[`data_zipper.py`](/src/data_zipper.py)**: Organizes sensor data into compressed formats for efficient storage and retrieval.
-- **[`file_import.py`](/src/file_import.py)**: Automates the import of sensor data from zip files into the database, supporting concurrent processing to enhance efficiency.
-- **[`model_pipeline.py`](/src/model_pipeline.py)**: Handles the setup and execution of model training and prediction workflows, including data loading and logging.
-- **[`predict_api.py`](/src/predict_api.py)**: Establishes an API using FastAPI for uploading files and retrieving model predictions.
-- **[`train.py`](/src/train.py)**: Outlines the procedure for training models using configurations and data specified.
-- **[`utils.py`](/src/utils.py)**: Offers miscellaneous functions for environment setup, data path generation, and parameter validation.
+**Utility and Management (`src/`)**
+- **[`dashboard.py`](src/dashboard.py)**: Implements a Streamlit dashboard for interactive model evaluations and visualizations.
+- **[`data_pipeline.py`](src/data_pipeline.py)**: Coordinates the flow from data ingestion through preprocessing to feature engineering, dynamically configured via Hydra.
+- **[`data_zipper.py`](src/data_zipper.py)**: Organizes sensor data into compressed formats for efficient storage and retrieval.
+- **[`file_import.py`](src/file_import.py)**: Automates the import of sensor data from zip files into the database, supporting concurrent processing to enhance efficiency.
+- **[`model_pipeline.py`](src/model_pipeline.py)**: Handles the setup and execution of model training and prediction workflows, including data loading and logging.
+- **[`predict_api.py`](src/predict_api.py)**: Establishes an API using FastAPI for uploading files and retrieving model predictions.
+- **[`train.py`](src/train.py)**: Outlines the procedure for training models using configurations and data specified.
+- **[`utils.py`](src/utils.py)**: Offers miscellaneous functions for environment setup, data path generation, and parameter validation.
