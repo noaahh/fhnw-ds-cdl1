@@ -289,7 +289,7 @@ on [SWITCHdrive](https://drive.switch.ch/index.php/s/l0o3EDXyeaFB2Je).
 
 Here is a video showing how to use the dashboard:
 
-<div style="position: relative; padding-bottom: 56.25%; height: 0;"><iframe src="https://www.loom.com/embed/1007378404564d7b949bde2d19b872a9?sid=151a8032-5fb5-46d3-ac28-a8ea2b1d3c5a" frameborder="0" webkitallowfullscreen mozallowfullscreen allowfullscreen style="position: absolute; top: 0; left: 0; width: 100%; height: 100%;"></iframe></div>
+<iframe width="640" height="360" src="https://www.loom.com/embed/1007378404564d7b949bde2d19b872a9?sid=21115a35-c475-4339-9c57-8fdacdb3f972" frameborder="0" webkitallowfullscreen mozallowfullscreen allowfullscreen></iframe>
 
 Along with the dashboard, you can also run the prediction API to handle file uploads for prediction:
 
