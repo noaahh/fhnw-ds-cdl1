@@ -1,5 +1,7 @@
 from pathlib import Path
 import tempfile
+
+import joblib
 import rootutils
 import streamlit as st
 
@@ -23,6 +25,10 @@ with st.sidebar:
 
     batch_size = st.number_input("Batch Size", min_value=1, value=128, step=1)
 
+    scaler_file = st.file_uploader("Choose a Scaler file", type="pkl", help="Upload a Scaler file to scale the data "
+                                                                            "properly. If not provided, results may be "
+                                                                            "inaccurate and poor.")
+
 uploaded_file = st.file_uploader("Choose a ZIP file", type="zip", help="Upload a ZIP file containing the data to be "
                                                                        "processed.")
 
@@ -34,12 +40,20 @@ if uploaded_file is not None:
         with open(zip_path, "wb") as buffer:
             buffer.write(uploaded_file.getvalue())
 
+        scaler = None
+        if scaler_file is not None:
+            scaler_path = temp_dir_path / scaler_file.name
+            with open(scaler_path, "wb") as buffer:
+                buffer.write(scaler_file.getvalue())
+            scaler = joblib.load(scaler_path)
+
         if st.button('Process File'):
             with st.spinner('Processing...'):
                 try:
                     prediction = predict_file(measurement_file_path=zip_path,
                                               model_name=model,
                                               batch_size=batch_size,
+                                              scaler=scaler,
                                               wandb_artifact_path=wandb_artifact_path,
                                               verbose=True)
 

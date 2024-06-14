@@ -95,6 +95,7 @@ def predict_file(measurement_file_path: Path,
                  model_name: str,
                  batch_size: int,
                  verbose: bool,
+                 scaler=None,
                  local_checkpoint_path: str = None,
                  wandb_artifact_path: str = None):
     setup_logging(verbose)
@@ -105,9 +106,12 @@ def predict_file(measurement_file_path: Path,
         cfg = compose(config_name="pipeline.yaml",
                       overrides=[f"+measurement_file_path={measurement_file_path}"])
         segments_df = pipeline(cfg)
-        scaler = load_scaler(cfg)
-        if scaler:
-            segments_df.loc[:, scaler.feature_names_in_] = scaler.transform(segments_df[scaler.feature_names_in_])
+
+        if scaler is None:
+            scaler = load_scaler(cfg)
+
+    if scaler:
+        segments_df.loc[:, scaler.feature_names_in_] = scaler.transform(segments_df[scaler.feature_names_in_])
 
     data_loader = SensorDataModule.create_dataloader(segments_df,
                                                      batch_size=batch_size,
