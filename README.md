@@ -12,8 +12,6 @@ tasks using time-series data from multiple sensors.
 * [cdl1: Sensor Based Activity Recognition](#cdl1-sensor-based-activity-recognition)
   * [Prerequisites](#prerequisites)
   * [Installation](#installation)
-    * [Conda Environment](#conda-environment)
-    * [Virtual Environment](#virtual-environment)
   * [Project Overview](#project-overview)
   * [Data Structure](#data-structure)
   * [Experiment Configuration with Hydra](#experiment-configuration-with-hydra)
@@ -30,7 +28,7 @@ tasks using time-series data from multiple sensors.
       * [Data Partitioning](#data-partitioning)
   * [Workflow and Execution](#workflow-and-execution)
   * [Dashboard](#dashboard)
-  * [Model Overview](#model-overview)
+  * [Model Analysis](#model-analysis)
   * [Notebooks](#notebooks)
   * [Codebase](#codebase)
 <!-- TOC -->
@@ -58,9 +56,6 @@ other services. Replace the `PROJECT_ROOT` variable with the absolute path to th
 Note: The absolute path wont work in the Docker container, so you need to set the `PROJECT_ROOT` variable to be relative
 to the Docker container file system.
 
-
-### Conda Environment
-
 Set up the Python environment with Conda:
 
 ```bash
@@ -69,9 +64,7 @@ make setup
 
 Afterwards you should be good to go and use the Python environment.
 
-### Virtual Environment
-
-If you prefer to use a virtual environment, you can create one using the following commands:
+**If you prefer to use a virtual environment, you can create one using the following commands:**
 
 ```bash
 python -m venv .venv
@@ -139,6 +132,8 @@ when multiple people are involved in the data collection.
 
 The zip files should be named according to the activity with an underscore-separated timestamp. The mapping of labels is
 also defined in the `src/data/label_mapping.py` file.
+
+You can find all the collected and used data on [SWITCHdrive](https://drive.switch.ch/index.php/s/l0o3EDXyeaFB2Je).
 
 ## Experiment Configuration with Hydra
 
@@ -296,14 +291,17 @@ make run-dashboard
 This will start the Streamlit server and open the dashboard in your default web browser. The dashboard allows you to
 upload sensor data files and get predictions from the trained models based on a Weights & Biases artifact.
 
-Here are some pretrained models that can be used with the dashboard for each corresponding model architecture:
+Here are some pretrained models that can be used with the dashboard for each corresponding model architecture which can
+be copy pasted as Wandb artifact path in the dashboard:
 
-- CNN: lang-based-yappers/cdl1/model-dr0el08d:v30
-- Deep Residual Bidirectional LSTM: lang-based-yappers/cdl1/model-1z1z1z1z:v30
-- Logistic Regression: lang-based-yappers/cdl1/model-1z1z1z1z:v30
-- LSTM: lang-based-yappers/cdl1/model-1z1z1z1z:v30
-- xLSTM: lang-based-yappers/cdl1/model-1z1z1z1z:v30
-- Transformer: lang-based-yappers/cdl1/model-1z1z1z1z:v30
+```plaintext
+- CNN:                                    lang-based-yappers/cdl1/model-0gfliwdd:best
+- Deep Residual Bidirectional LSTM:       lang-based-yappers/cdl1/model-kfezxxez:best
+- Logistic Regression:                    lang-based-yappers/cdl1/model-4x2zewmj:best
+- LSTM:                                   lang-based-yappers/cdl1/model-octutiu4:best
+- xLSTM:                                  lang-based-yappers/cdl1/model-jfnd0mql:best
+- Transformer:                            lang-based-yappers/cdl1/model-df757nif:best
+```
 
 As the data is usually scaled and normalized before training, the dashboard will also scale and normalize the uploaded
 file using a provided scaler artifact. The scaler artifact used for the latest data and pretrained runs can be found
@@ -322,11 +320,11 @@ make run-api
 This will start the FastAPI server and allow you to upload sensor data files for prediction. The API will return the
 majority label predicted by the model.
 
-## Model Overview
+## Model Analysis
 
 The project explores various deep learning models for sensor-based activity recognition. The models are designed to
 process time-series data from multiple sensors and predict the activity label associated with the data. Information
-about the models and their architectures can be found in the [Model Overview](/MODEL-OVERVIEW.md) document.
+about the models and their architectures can be found in the [Model Analysis](ANALYSIS.md) document.
 
 ## Notebooks
 
@@ -362,7 +360,7 @@ specific roles in data handling, feature extraction, model training, and utility
 
 **Models (`src/models/`)**
 
-- More detailed information about the models can be found in the [Model Overview](/MODEL-OVERVIEW.md) document.
+- More detailed information about the models can be found in the [Model Analysis](ANALYSIS.md) document.
 - **[`cnn.py`](src/models/cnn.py)**: Defines the Convolutional Neural Network architecture for processing spatially
   correlated data inputs.
 - **[`deep_res_bidir_lstm.py`](src/models/deep_res_bidir_lstm.py)**: Implements a Deep Residual Bidirectional LSTM

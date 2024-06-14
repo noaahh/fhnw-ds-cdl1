@@ -9,9 +9,9 @@
 | linear   | Linear             | 20.1 K |
 
 ### Convolutional Neural Network (CNN)
-- **Paper**: [Convolutional Networks for Images, Speech, and Time-Series](https://citeseerx.ist.psu.edu/document?repid=rep1&type=pdf&doi=e26cc4a1c717653f323715d751c8dea7461aa105)
-- **Implementation**: [cnn.py](/src/models/cnn.py)
-- **Model Config**: [cnn.yaml](/configs/model/cnn.yaml)
+- **Paper**: No specific paper, but CNNs are widely used for time-series data analysis: 
+- **Implementation**: [cnn.py](src/models/cnn.py)
+- **Model Config**: [cnn.yaml](configs/model/cnn.yaml)
 
 1-dimensional convolutional neural networks (1D CNNs) are suitable for classifying human sensor activity because they can efficiently capture local patterns in time-series data, which is common in sensor readings. By applying convolutional filters along the time dimension, 1D CNNs can detect and learn important features such as spikes, trends, and periodicities that correspond to different activities. Additionally, 1D CNNs have fewer parameters compared to RNNs (i.e. LSTMs), making them faster to train and less prone to overfitting, which is beneficial for large-scale sensor data.
 
@@ -26,8 +26,8 @@
 
 ### Long Short-Term Memory Model (LSTM)
 - **Paper**: [Long Short-term Memory](https://www.researchgate.net/publication/13853244_Long_Short-term_Memory)
-- **Implementation**: [lstm.py](/src/models/lstm.py)
-- **Model Config**: [lstm.yaml](/configs/model/lstm.yaml)
+- **Implementation**: [lstm.py](src/models/lstm.py)
+- **Model Config**: [lstm.yaml](configs/model/lstm.yaml)
 
 A simple LSTM is well-suited for Sensor Activity Recognition due to its ability to capture long-term dependencies and temporal patterns in sequential data, which is what sensor readings are. LSTMs maintain and update a memory cell that allows them to remember important information over long sequences, making them adept at modeling the temporal dynamics of sensor data. Additionally, LSTMs are relatively straightforward to implement and have proven robustness in various time-series prediction tasks, providing a reliable and efficient option for recognizing activities from sensor inputs.
 
@@ -39,8 +39,8 @@ A simple LSTM is well-suited for Sensor Activity Recognition due to its ability 
 
 ### Extended Long Short-Term Memory (xLSTM)
 - **Paper**: [xLSTM: Extended Long Short-Term Memory](https://arxiv.org/abs/2405.04517)
-- **Implementation**: [x_lstm.py](/src/models/x_lstm.py)
-- **Model Config**: [x_lstm.yaml](/configs/model/x_lstm.yaml)
+- **Implementation**: [x_lstm.py](src/models/x_lstm.py)
+- **Model Config**: [x_lstm.yaml](configs/model/x_lstm.yaml)
 
 **tl;dr**:
 In the 90s, LSTMs introduced gating and the constant error carousel, forming the basis for the first Large Language Models (LLMs). The recently (May 2024) released paper of the xLSTM architecture explores scaling LSTMs to billions of parameters by introducing exponential gating with appropriate normalization and stabilization techniques, and modifying the LSTM memory structure into sLSTM (with scalar memory and update) and mLSTM (with matrix memory and covariance update rule). These modifications, integrated into residual block backbones and stacked into xLSTM architectures, enhance performance and scalability, making xLSTMs competitive with state-of-the-art Transformers and State Space Models.
@@ -53,7 +53,7 @@ The core idea of the paper is to solve 3 problems that the current LSTM has:
 
 - Inability to revise memory decisions: LSTMs struggle to update a stored value when a more similar vector is found during tasks such as nearest neighbor search. 
 - Limited memory capacity: LSTMs compress information into scalar cell states, which can lead to poor performance in tasks such as predicting rare tokens.
-- Lack of parallelizability due to memory mixing: The connections between hidden states in LSTMs force sequential processing, which limits parallelization and makes it slow.
+- Lack of parallelization due to memory mixing: The connections between hidden states in LSTMs force sequential processing, which limits parallelization and makes it slow.
 
 To do this 2 new LSTM cells are introduced, the sLSTM and mLSTM. The combination of these in certain arrangement build up the xLSTM architecture (combined via residual connection).
 
@@ -71,7 +71,7 @@ This means that the input is first linearly projected to a high-dimensional spac
 This is then again linearly projected back to the original space. The hope here is that this allows the model to be more computationally efficient. 
 This can be though of similar to how state space models work, where the state is projected to a high-dimensional space, the dynamics are applied and then projected back to the original space.
 
-The hyperparameters can be viewed in the [config file](/configs/model/x_lstm.yaml).
+The hyperparameters can be viewed in the [config file](configs/model/x_lstm.yaml).
 
 | Name       | Type               | Params |
 |------------|--------------------|--------|
@@ -79,9 +79,9 @@ The hyperparameters can be viewed in the [config file](/configs/model/x_lstm.yam
 | classifier | Linear             | 85     |
 
 ### Deep Residual Bidirectional LSTM
-- **Paper**: [Deep Residual Bidir-LSTM for Human Activity Recognition Using Wearable Sensors](https://arxiv.org/pdf/1708.08989v2)
-- **Implementation**: [deep_res_bidir_lstm.py](/src/models/deep_res_bidir_lstm.py)
-- **Model Config**: [deep_res_bidir_lstm.yaml](/configs/model/lsdeep_res_bidir_lstm.yaml)
+- **Paper**: [Deep Residual Bidir-LSTM for Human Activity Recognition Using Wearable Sensors](https://arxiv.org/abs/1708.08989v2)
+- **Implementation**: [deep_res_bidir_lstm.py](src/models/deep_res_bidir_lstm.py)
+- **Model Config**: [deep_res_bidir_lstm.yaml](configs/model/lsdeep_res_bidir_lstm.yaml)
 
 The Deep Residual Bidirectional LSTM model introduced by Yu Zhao et al. is a deep learning architecture which tried to 
 combine the powerful residual connection from a ResNet on top of a Bidirectional LSTM. 
@@ -99,8 +99,8 @@ For this challenge the configuration used are 3 residual layers with each 2 Bidi
 
 ### Transformer
 - **Paper**: [Attention Is All You Need](https://arxiv.org/abs/1706.03762)
-- **Implementation**: [transformer.py](/src/models/transformer.py)
-- **Model Config**: [transformer.yaml](/configs/model/transformer.yaml)
+- **Implementation**: [transformer.py](src/models/transformer.py)
+- **Model Config**: [transformer.yaml](configs/model/transformer.yaml)
 
 We propose that the self-attention mechanism, parallel processing capabilities, scalability, flexibility, and robust performance of Transformers as seen in numerous established applications can make a powerful choice for Sensor Activity Recognition.
 
