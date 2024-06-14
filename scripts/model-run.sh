@@ -1,13 +1,22 @@
-python /teamspace/studios/this_studio/cdl1-sensor-based/src/train.py experiment=bidir_lstm
-python /teamspace/studios/this_studio/cdl1-sensor-based/src/train.py experiment=cnn
-python /teamspace/studios/this_studio/cdl1-sensor-based/src/train.py experiment=log_reg
-python /teamspace/studios/this_studio/cdl1-sensor-based/src/train.py experiment=lstm
-python /teamspace/studios/this_studio/cdl1-sensor-based/src/train.py experiment=transformer
-python /teamspace/studios/this_studio/cdl1-sensor-based/src/train.py experiment=x_lstm
+#!/bin/bash
 
-python /teamspace/studios/this_studio/cdl1-sensor-based/src/train.py experiment=bidir_lstm refit_on_all_data=True
-python /teamspace/studios/this_studio/cdl1-sensor-based/src/train.py experiment=cnn refit_on_all_data=True
-python /teamspace/studios/this_studio/cdl1-sensor-based/src/train.py experiment=log_reg refit_on_all_data=True
-python /teamspace/studios/this_studio/cdl1-sensor-based/src/train.py experiment=lstm refit_on_all_data=True
-python /teamspace/studios/this_studio/cdl1-sensor-based/src/train.py experiment=transformer refit_on_all_data=True
-python /teamspace/studios/this_studio/cdl1-sensor-based/src/train.py experiment=x_lstm refit_on_all_data=True
+if [ -z "$1" ]; then
+  echo "Usage: $0 <base_path>"
+  exit 1
+fi
+
+BASE_PATH="$1"
+EXPERIMENTS=(bidir_lstm cnn log_reg lstm transformer x_lstm)
+
+# Regular runs
+python "$BASE_PATH/src/data_pipeline.py"
+for EXP in "${EXPERIMENTS[@]}"; do
+    python "$BASE_PATH/src/train.py" experiment=$EXP
+    python "$BASE_PATH/src/train.py" experiment=$EXP refit_on_all_data=True
+done
+
+# Runs with k-folds
+python "$BASE_PATH/src/data_pipeline.py" partitioning.k_folds=5
+for EXP in "${EXPERIMENTS[@]}"; do
+    python "$BASE_PATH/src/train.py" experiment=$EXP partitioning.k_folds=5
+done
