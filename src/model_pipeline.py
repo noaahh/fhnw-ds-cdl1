@@ -1,7 +1,9 @@
 import logging
+import os
 import tempfile
 from pathlib import Path
 
+import joblib
 import rootutils
 import torch
 import wandb
@@ -40,6 +42,21 @@ LIGHTNING_MODULES = {
     "CNN": Simple1DCNN,
     "xLSTM": XLSTM
 }
+
+
+def load_scaler(cfg):
+    partitioned_data_dir = cfg.paths.get("partitioned_data_dir")
+    scaler_path = os.path.join(partitioned_data_dir, 'scaler.pkl')
+
+    if not os.path.exists(scaler_path):
+        logger.warning(f"Scaler file not found at {scaler_path}")
+        return None
+
+    logger.info(f"Loading scaler from {scaler_path}")
+    scaler = joblib.load(scaler_path)
+    logger.info("Scaler loaded successfully.")
+
+    return scaler
 
 
 def load_model(model_name, local_checkpoint_path=None, wandb_artifact_path=None):
@@ -88,6 +105,9 @@ def predict_file(measurement_file_path: Path,
         cfg = compose(config_name="pipeline.yaml",
                       overrides=[f"+measurement_file_path={measurement_file_path}"])
         segments_df = pipeline(cfg)
+        scaler = load_scaler(cfg)
+        if scaler:
+            segments_df.loc[:, scaler.feature_names_in_] = scaler.transform(segments_df[scaler.feature_names_in_])
 
     data_loader = SensorDataModule.create_dataloader(segments_df,
                                                      batch_size=batch_size,
@@ -109,5 +129,4 @@ def predict_file(measurement_file_path: Path,
     logger.info(f"Majority label: {majority_label}")
 
     logger.info("Model pipeline execution completed.")
-
     return majority_label

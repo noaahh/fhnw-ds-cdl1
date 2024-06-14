@@ -5,6 +5,7 @@ import os
 import shutil
 
 import hydra
+import joblib
 import pandas as pd
 import rootutils
 from dotenv import load_dotenv
@@ -328,7 +329,8 @@ def get_scaler(scaler_type: str) -> object:
 def scale_data(train_data: pd.DataFrame,
                val_data: pd.DataFrame | None,
                test_data: pd.DataFrame | None,
-               cfg: dict) -> tuple:
+               cfg: dict,
+               return_scaler: bool = False, ) -> tuple:
     """Apply scaling to the training and validation data."""
     scaler = get_scaler(cfg.preprocessing.scaling.type)
     float_columns = train_data.select_dtypes(include=['float64']).columns
@@ -337,6 +339,9 @@ def scale_data(train_data: pd.DataFrame,
         val_data.loc[:, float_columns] = scaler.transform(val_data[float_columns])
     if test_data is not None:
         test_data.loc[:, float_columns] = scaler.transform(test_data[float_columns])
+
+    if return_scaler:
+        return train_data, val_data, test_data, scaler
     return train_data, val_data, test_data
 
 
@@ -391,6 +396,14 @@ def save_partitions(data_partitions, cfg):
     logger.info("Data partitions saved successfully.")
 
 
+def save_scaler(scaler, cfg):
+    partitioned_data_dir = cfg.paths.get("partitioned_data_dir")
+    os.makedirs(partitioned_data_dir, exist_ok=True)
+    scaler_path = os.path.join(partitioned_data_dir, 'scaler.pkl')
+    joblib.dump(scaler, scaler_path)
+    logger.info("Scaler saved successfully.")
+
+
 @hydra.main(version_base="1.3", config_path="../configs", config_name="pipeline.yaml")
 def pipeline(cfg):
     print(OmegaConf.to_yaml(cfg))
@@ -415,8 +428,6 @@ def pipeline(cfg):
     segments_df = extract_features(segments_df, cfg)
 
     if measurement_file_path:
-        # Dirty hack as we don't have the scaling parameters for the single file prediction case
-        segments_df, _, _ = scale_data(segments_df, None, None, cfg)
         logger.info("Done processing single measurement file.")
         return segments_df
 
@@ -434,19 +445,18 @@ def pipeline(cfg):
             folds_data[i]['validate'] = val_data
 
         train_all = pd.concat(unscaled_val_folds, axis=0)
-        train_all, _, test_data = scale_data(train_all, None, test_data, cfg)
+        train_all, _, test_data, all_scaler = scale_data(train_all, None, test_data, cfg, return_scaler=True)
         data_partitions = {
             'folds': [(fd['train'], fd['validate']) for fd in folds_data],
             'test': test_data,
             'train_all': train_all
         }
-
     else:
         train_data, val_data, test_data = split_data(segments_df, cfg)
         train_all = pd.concat([train_data.copy(), val_data.copy()], axis=0)
 
         train_data, val_data, _ = scale_data(train_data, val_data, None, cfg)
-        train_all, _, test_data = scale_data(train_all, None, test_data, cfg)
+        train_all, _, test_data, all_scaler = scale_data(train_all, None, test_data, cfg, return_scaler=True)
 
         data_partitions = {
             'train': train_data,
@@ -456,6 +466,8 @@ def pipeline(cfg):
         }
 
     save_partitions(data_partitions, cfg)
+    save_scaler(all_scaler, cfg)
+
     logger.info("Data preparation completed.")
 
 
