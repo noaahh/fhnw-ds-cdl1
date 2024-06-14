@@ -115,6 +115,14 @@ On top of the transformer we add a classification head to predict the activity. 
 
 ## Comparison between Classical and Deep Learning Models
 
+Before looking at the results there are a few things to note.
+
+The data used for this challenge is around 10hrs of sensor data. It is tracked across 3 different devices. 
+
+We want to highlight that the results here need to be looked at with a grain of salt. The dataset is too small to make very solid conclusions. 
+Given the usage of the devices, the variance can also be questioned.
+
+None of the models received any special hyperparameter tuning. The hyperparameters were chosen common defaults and manual tuning to ensure smooth training.
 
 The data is split as follows:
 - **Train**: 60% of complete data
@@ -149,5 +157,10 @@ The table below shows the performances of all the models on validation/test data
 | Extended Long Short-Term Memory (xLSTM) | F1 Weighted | 0.907 | 0.7969 | 0.8017 |
 |                                         | Accuracy    | 0.874 | 0.7748 | 0.7569 |
 
+
+Given the task at hand we can see that both simpel and complex models do very well on the task at hand. 
+Especially transformer, CNN and Deep Residual Bidirectional LSTM are performing very well.
+
+Interestingly the xLSTM model is not performing well on the refit or KFold, even though on main run type it seems to do not bad.
 
 
